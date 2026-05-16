@@ -202,13 +202,10 @@ export const WaitlistSection = () => {
                         />
                       </div>
                       <p className="pl-1 text-xs leading-relaxed text-blue-600/80">
-                        LinkedIn is optional. Signups are stored in a CSV on this server (open in Excel)
-                        and sent to{" "}
-                        <strong className="text-blue-900">varun.k@byosync.in</strong> when{" "}
-                        <code className="rounded border border-blue-100 bg-blue-50 px-1 font-mono text-[10px]">
-                          RESEND_API_KEY
-                        </code>{" "}
-                        is set in the environment.
+                        LinkedIn is optional. On the live site (Vercel), signups are stored in a small
+                        database and/or emailed to{" "}
+                        <strong className="text-blue-900">varun.k@byosync.in</strong>. You can export
+                        everything as a CSV from your admin link.
                       </p>
                     </div>
                     <Button

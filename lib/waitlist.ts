@@ -1,10 +1,26 @@
+import { Redis } from "@upstash/redis";
 import fs from "fs/promises";
 import path from "path";
 
 export const WAITLIST_NOTIFY_DEFAULT = "varun.k@byosync.in";
 
+/** Redis list key — survives Vercel serverless (ephemeral disk). */
+const REDIS_KEY = "byosync:waitlist:v1";
+
 export const DATA_DIR = path.join(process.cwd(), "data");
 export const CSV_PATH = path.join(DATA_DIR, "waitlist.csv");
+
+export function hasUpstashRedis(): boolean {
+  return Boolean(
+    process.env.UPSTASH_REDIS_REST_URL?.trim() &&
+      process.env.UPSTASH_REDIS_REST_TOKEN?.trim(),
+  );
+}
+
+function getRedis(): Redis | null {
+  if (!hasUpstashRedis()) return null;
+  return Redis.fromEnv();
+}
 
 export function escapeCsvCell(value: string): string {
   const cleaned = value.replace(/\r\n|\r|\n/g, " ").trim();
@@ -19,7 +35,9 @@ export type WaitlistPayload = {
   linkedin: string;
 };
 
-export async function appendWaitlistRow(row: WaitlistPayload): Promise<void> {
+type StoredRow = WaitlistPayload & { timestamp: string };
+
+async function appendWaitlistFileRow(row: WaitlistPayload): Promise<void> {
   await fs.mkdir(DATA_DIR, { recursive: true });
 
   let exists = true;
@@ -47,6 +65,86 @@ export async function appendWaitlistRow(row: WaitlistPayload): Promise<void> {
   }
 }
 
+/**
+ * Persist signup. On Vercel, use Upstash Redis (not the local CSV).
+ * Locally, uses data/waitlist.csv when Redis is not configured.
+ */
+export async function appendWaitlistRow(row: WaitlistPayload): Promise<void> {
+  const redis = getRedis();
+  const entry: StoredRow = {
+    timestamp: new Date().toISOString(),
+    ...row,
+  };
+
+  if (redis) {
+    await redis.rpush(REDIS_KEY, JSON.stringify(entry));
+    return;
+  }
+
+  if (process.env.VERCEL === "1") {
+    console.warn(
+      "[waitlist] Vercel: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set — signup not persisted to DB (use Resend email only or add Upstash).",
+    );
+    return;
+  }
+
+  await appendWaitlistFileRow(row);
+}
+
+/** Full CSV for export (Redis or local file). */
+export async function buildWaitlistCsv(): Promise<string> {
+  const header = "timestamp,name,email,phone,linkedin_url\n";
+  const redis = getRedis();
+
+  if (redis) {
+    const items = await redis.lrange<string>(REDIS_KEY, 0, -1);
+    if (!items?.length) return header;
+    const lines = items
+      .map((raw) => {
+        try {
+          const o = JSON.parse(raw) as StoredRow;
+          return [
+            o.timestamp,
+            o.name,
+            o.email,
+            o.phone,
+            o.linkedin ?? "",
+          ]
+            .map(escapeCsvCell)
+            .join(",");
+        } catch {
+          return "";
+        }
+      })
+      .filter(Boolean);
+    return header + lines.join("\n") + "\n";
+  }
+
+  try {
+    const raw = await fs.readFile(CSV_PATH, "utf8");
+    if (raw.trim()) return raw.endsWith("\n") ? raw : raw + "\n";
+  } catch {
+    /* no local file */
+  }
+  return header;
+}
+
+/** Vercel needs Redis and/or Resend or signups are not retained. */
+export function waitlistVercelReady(): boolean {
+  if (process.env.VERCEL !== "1") return true;
+  return hasUpstashRedis() || Boolean(process.env.RESEND_API_KEY?.trim());
+}
+
+function storageNoteHtml(): string {
+  if (hasUpstashRedis()) {
+    return "This signup was stored in Upstash Redis (export CSV from your admin link).";
+  }
+  if (process.env.VERCEL === "1") {
+    return "Deployed on Vercel — ensure Upstash Redis and/or Resend is configured so signups are retained.";
+  }
+  return "This signup was appended to data/waitlist.csv on the server.";
+}
+
 /** Optional: notify via Resend when RESEND_API_KEY is set. Does not throw. */
 export async function notifyWaitlistByEmail(row: WaitlistPayload): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -65,7 +163,7 @@ export async function notifyWaitlistByEmail(row: WaitlistPayload): Promise<void>
       <tr><td style="padding:6px 12px 6px 0;color:#64748b;">Phone</td><td>${escapeHtml(row.phone)}</td></tr>
       <tr><td style="padding:6px 12px 6px 0;color:#64748b;">LinkedIn</td><td>${row.linkedin ? escapeHtml(row.linkedin) : "—"}</td></tr>
     </table>
-    <p style="font-family:monospace;font-size:12px;color:#94a3b8;margin-top:16px;">Also appended to data/waitlist.csv on this server.</p>
+    <p style="font-family:monospace;font-size:12px;color:#94a3b8;margin-top:16px;">${storageNoteHtml()}</p>
   `.trim();
 
   try {

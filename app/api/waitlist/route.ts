@@ -2,10 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   appendWaitlistRow,
   notifyWaitlistByEmail,
+  waitlistVercelReady,
 } from "@/lib/waitlist";
 
 export async function POST(req: NextRequest) {
   try {
+    if (!waitlistVercelReady()) {
+      return NextResponse.json(
+        {
+          error:
+            "Waitlist is not configured for this server. On Vercel, add Upstash Redis (UPSTASH_REDIS_REST_*) and/or Resend (RESEND_API_KEY) in Project → Settings → Environment Variables.",
+        },
+        { status: 503 },
+      );
+    }
+
     const body = await req.json();
     const name = typeof body.name === "string" ? body.name : "";
     const email = typeof body.email === "string" ? body.email : "";
@@ -31,7 +42,6 @@ export async function POST(req: NextRequest) {
 
     await appendWaitlistRow(row);
 
-    // Fire-and-forget email to Varun (requires RESEND_API_KEY – see lib/waitlist.ts)
     void notifyWaitlistByEmail(row);
 
     return NextResponse.json({ ok: true });
