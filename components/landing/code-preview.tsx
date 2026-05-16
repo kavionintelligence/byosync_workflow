@@ -738,12 +738,12 @@ export const CodePreview = () => {
   const progressPct = last > 0 ? (activeIdx / last) * 100 : 100;
 
   const arrowBtn =
-    "flex shrink-0 self-center h-9 w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-600 shadow-sm hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2";
+    "flex shrink-0 self-center h-8 w-8 sm:h-9 sm:w-9 md:h-11 md:w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-600 shadow-sm hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2";
 
   return (
-    <section className="relative overflow-hidden bg-white py-14 md:py-20">
+    <section className="relative overflow-x-clip bg-white py-12 sm:py-16 md:py-20">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <div className="flex items-stretch gap-1.5 sm:gap-3 md:gap-4">
+        <div className="flex items-start gap-1 sm:items-stretch sm:gap-1.5 md:gap-4">
           <button
             type="button"
             className={arrowBtn}
@@ -762,7 +762,7 @@ export const CodePreview = () => {
             onDragEnd={onDragEnd}
             className="min-w-0 flex-1 cursor-grab active:cursor-grabbing"
           >
-        <div className="grid lg:grid-cols-[1fr_1.2fr] gap-10 items-center">
+        <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[1fr_1.2fr] lg:gap-10">
 
           {/* ── LEFT ─────────────────────────────────────────────────── */}
           <div className="flex flex-col gap-5">
@@ -772,8 +772,8 @@ export const CodePreview = () => {
               Developer Integration
             </div>
 
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tighter leading-tight text-blue-950">
-              A single handshake for <br />
+            <h2 className="text-[clamp(1.65rem,4vw+0.5rem,3.25rem)] font-bold leading-[1.15] tracking-tighter text-blue-950">
+              A single handshake for{" "}
               <span className="text-blue-600">total identity trust.</span>
             </h2>
 
@@ -792,7 +792,7 @@ export const CodePreview = () => {
                 >
                   {slide.badge}
                 </span>
-                <h3 className="text-2xl font-bold text-blue-950 leading-snug">{slide.title}</h3>
+                <h3 className="text-xl font-bold leading-snug text-blue-950 sm:text-2xl">{slide.title}</h3>
                 <p className="text-blue-800 text-sm leading-relaxed font-sans">{slide.desc}</p>
               </motion.div>
             </AnimatePresence>
@@ -804,7 +804,7 @@ export const CodePreview = () => {
                 <span className="hidden text-slate-400 sm:inline">Swipe or use arrows · tap dots</span>
                 <span className="sm:hidden">Swipe · dots</span>
               </div>
-              <div className="mb-2 flex flex-wrap gap-1.5">
+              <div className="mb-2 flex max-w-full gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {SLIDES.map((s, i) => (
                   <button
                     key={i}
@@ -848,21 +848,22 @@ export const CodePreview = () => {
             <div className="relative bg-[#0b0e14] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
 
               {/* ── Chrome bar with language tabs ── */}
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 bg-white/[0.02]">
+              <div className="flex flex-col gap-3 border-b border-white/5 bg-white/[0.02] px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-2.5">
                 {/* Traffic lights */}
-                <div className="flex gap-1.5 shrink-0">
-                  <div className="w-3 h-3 rounded-full bg-red-500/50" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
-                  <div className="w-3 h-3 rounded-full bg-green-500/50" />
+                <div className="flex shrink-0 gap-1.5">
+                  <div className="h-3 w-3 rounded-full bg-red-500/50" />
+                  <div className="h-3 w-3 rounded-full bg-yellow-500/50" />
+                  <div className="h-3 w-3 rounded-full bg-green-500/50" />
                 </div>
 
                 {/* Language selector tabs */}
-                <div className="flex items-center gap-1 bg-white/[0.03] rounded-lg p-1 border border-white/5">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1 rounded-lg border border-white/5 bg-white/[0.03] p-1 sm:justify-center">
                   {LANGS.map(l => (
                     <button
                       key={l.id}
+                      type="button"
                       onClick={() => setLang(l.id)}
-                      className="relative px-3 py-1 rounded-md text-[11px] font-mono transition-colors duration-150"
+                      className="relative shrink-0 px-2.5 py-1 rounded-md text-[10px] font-mono transition-colors duration-150 sm:px-3 sm:text-[11px]"
                       style={{
                         color: lang === l.id ? "#0f172a" : "#475569",
                       }}
@@ -888,7 +889,7 @@ export const CodePreview = () => {
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.28, ease: motionEase }}
-                    className="text-[10px] font-mono text-slate-600 shrink-0"
+                    className="shrink-0 self-end text-[9px] font-mono text-slate-600 sm:self-center sm:text-[10px]"
                   >
                     {slide.num}
                   </motion.span>
@@ -903,8 +904,8 @@ export const CodePreview = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -3 }}
                   transition={{ duration: 0.34, ease: motionEase }}
-                  className="p-5 font-mono text-[12.5px] leading-relaxed overflow-y-auto touch-pan-y"
-                  style={{ maxHeight: "370px" }}
+                  className="max-h-[min(370px,52vh)] touch-pan-y overflow-y-auto p-4 font-mono text-[11px] leading-relaxed sm:p-5 sm:text-[12.5px]"
+                  style={{ scrollbarGutter: "stable" }}
                 >
                   {lines.map((line, i) => (
                     <div key={i} className="flex gap-3 min-h-[1.5rem]">

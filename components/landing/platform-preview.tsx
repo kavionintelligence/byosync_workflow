@@ -670,10 +670,10 @@ export const PlatformPreview = () => {
   const progressPct = last > 0 ? (activeIdx / last) * 100 : 100;
 
   const arrowBtn =
-    "flex shrink-0 self-center h-9 w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-600 shadow-sm hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2";
+    "flex shrink-0 self-center sm:self-center h-8 w-8 sm:h-9 sm:w-9 md:h-11 md:w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-600 shadow-sm hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2";
 
   return (
-    <section className="relative overflow-hidden bg-white py-14 md:py-20">
+    <section className="relative overflow-x-clip bg-white py-12 sm:py-16 md:py-20">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
 
           {/* Section header */}
@@ -685,7 +685,7 @@ export const PlatformPreview = () => {
             <div className="h-px max-w-16 flex-1 bg-blue-200/60" />
           </div>
 
-          <div className="flex items-stretch gap-1.5 sm:gap-3 md:gap-4">
+          <div className="flex items-start gap-1 sm:items-stretch sm:gap-1.5 md:gap-4">
             <button
               type="button"
               className={arrowBtn}
@@ -704,7 +704,7 @@ export const PlatformPreview = () => {
               onDragEnd={onDragEnd}
               className="min-w-0 flex-1 cursor-grab active:cursor-grabbing"
             >
-          <div className="grid lg:grid-cols-[1fr_1.5fr] gap-10 items-center">
+          <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[1fr_1.5fr] lg:gap-10">
 
             {/* ── Left: metadata ── */}
             <div className="flex flex-col gap-5">
@@ -718,7 +718,7 @@ export const PlatformPreview = () => {
                   className="flex flex-col gap-4"
                 >
                   {/* Perspective pills */}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono border transition-all ${
                       screen.perspective === "user"
                         ? "border-blue-400 bg-blue-50 text-blue-600 font-bold"
@@ -743,7 +743,7 @@ export const PlatformPreview = () => {
                     >
                       {screen.num} · {screen.badge}
                     </span>
-                    <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-blue-950 leading-snug">
+                    <h2 className="text-2xl font-bold leading-snug tracking-tight text-blue-950 sm:text-3xl md:text-4xl">
                       {screen.title}
                     </h2>
                   </div>
@@ -769,7 +769,7 @@ export const PlatformPreview = () => {
                       <span className="hidden text-slate-400 sm:inline">Swipe or use arrows · tap dots</span>
                       <span className="sm:hidden">Swipe · dots</span>
                     </div>
-                    <div className="mb-2 flex flex-wrap gap-1.5">
+                    <div className="mb-2 flex max-w-full gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                       {SCREENS.map((s, i) => (
                         <button
                           key={i}
@@ -815,8 +815,7 @@ export const PlatformPreview = () => {
               />
 
               <div className="relative">
-                {/* Screen with flex-col so chrome + content are properly sized */}
-                <div className="relative w-full aspect-[16/10] bg-white rounded-t-xl border-[4px] border-slate-200 overflow-hidden shadow-2xl flex flex-col">
+                <div className="relative mx-auto w-full min-w-0 max-w-full aspect-[16/10] rounded-t-xl border-[3px] border-slate-200 bg-white shadow-2xl flex flex-col overflow-hidden sm:border-[4px]">
 
                   {/* Browser chrome */}
                   <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-slate-100 bg-slate-50 shrink-0">

@@ -66,14 +66,13 @@ export const WaitlistSection = () => {
 
   return (
     <section 
-      id="waitlist"
-      className="relative py-32 px-6 overflow-hidden"
+      className="relative overflow-x-clip px-4 py-20 sm:px-6 sm:py-28 md:py-32"
       style={{ background: 'transparent' }}
     >
       <WaveBackground />
 
-      <div className="relative z-10 max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
+      <div className="relative z-10 mx-auto max-w-7xl">
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           
           {/* LEFT: DARK MOBILE MOCKUP */}
           <div className="flex flex-col items-center justify-center space-y-8">
@@ -83,7 +82,7 @@ export const WaitlistSection = () => {
             </div>
 
             {/* Dark Glass Phone Mockup */}
-            <div className="w-[280px] h-[520px] bg-slate-950/80 backdrop-blur-3xl rounded-[3rem] border-[8px] border-white/10 relative overflow-hidden shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)]">
+            <div className="relative mx-auto aspect-[280/520] w-[min(280px,88vw)] overflow-hidden rounded-[3rem] border-[8px] border-white/10 bg-slate-950/80 shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] backdrop-blur-3xl sm:w-[280px]">
               {/* Notch */}
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-6 bg-slate-900 rounded-b-2xl z-30 border-x border-b border-white/5" />
               
@@ -139,12 +138,12 @@ export const WaitlistSection = () => {
                   key="form" 
                   initial={{ opacity: 0, x: 20 }} 
                   animate={{ opacity: 1, x: 0 }}
-                  className="bg-white backdrop-blur-2xl p-8 md:p-12 rounded-[2.5rem] border border-blue-100 shadow-xl"
+                  className="rounded-[2rem] border border-blue-100 bg-white p-6 shadow-xl backdrop-blur-2xl sm:p-8 md:p-12"
                 >
-                  <h2 className="text-5xl md:text-6xl font-extrabold tracking-tighter mb-6 text-blue-950 leading-tight">
+                  <h2 className="mb-4 text-3xl font-extrabold leading-tight tracking-tighter text-blue-950 sm:mb-6 sm:text-4xl md:text-5xl lg:text-6xl">
                     Join the <span className="text-blue-600">Waitlist.</span>
                   </h2>
-                  <p className="text-blue-800 mb-10 text-xl max-w-md leading-relaxed">
+                  <p className="mb-8 max-w-md text-base leading-relaxed text-blue-800 sm:mb-10 sm:text-lg md:text-xl">
                     Zero-biometric infrastructure. <br />Available for early-access partners.
                   </p>
 
@@ -228,12 +227,12 @@ export const WaitlistSection = () => {
                   key="success" 
                   initial={{ scale: 0.9, opacity: 0 }} 
                   animate={{ scale: 1, opacity: 1 }} 
-                  className="bg-white p-12 rounded-[2.5rem] border border-blue-100 text-center lg:text-left shadow-xl"
+                  className="rounded-[2.5rem] border border-blue-100 bg-white p-8 text-center shadow-xl sm:p-10 lg:text-left"
                 >
                   <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-8 border border-blue-500/30 mx-auto lg:mx-0">
                     <CheckCircle2 className="w-10 h-10 text-blue-600" />
                   </div>
-                  <h3 className="text-4xl font-bold mb-4 text-blue-950 tracking-tight">Request Logged</h3>
+                  <h3 className="mb-4 text-2xl font-bold tracking-tight text-blue-950 sm:text-3xl md:text-4xl">Request Logged</h3>
                   <p className="text-blue-800 text-lg">Welcome to the future of auth, {formData.name.split(' ')[0]}.</p>
                   <Button
                     variant="ghost"

@@ -340,17 +340,31 @@ const SF_CSS = `
 
 /* ── responsive ─────────────────────────────────────── */
 @media (max-width: 1280px) {
-  #byosync-sf .sf-stage { grid-template-columns: 1fr; }
+  #byosync-sf .sf-stage { grid-template-columns: 1fr; min-height: 720px; }
   #byosync-sf .sf-dossier {
     border-left: none; border-top: 1px solid rgba(34, 211, 238, 0.18);
     position: static; max-height: none;
   }
 }
+@media (max-width: 1024px) {
+  #byosync-sf .sf-tab { min-width: 170px; padding: 12px 20px 16px; }
+  #byosync-sf .sf-tab .sf-sc-title { font-size: 15px; }
+  #byosync-sf .sf-stage { min-height: 640px; }
+}
 @media (max-width: 720px) {
-  #byosync-sf .sf-header { padding: 48px 24px 0; }
-  #byosync-sf .sf-scenarios { padding-left: 24px; padding-right: 24px; }
-  #byosync-sf .sf-theatre { padding: 20px 24px; }
-  #byosync-sf .sf-dossier { padding: 24px; }
+  #byosync-sf .sf-header { padding: 40px 20px 0; }
+  #byosync-sf .sf-scenarios { padding: 20px 16px 0; }
+  #byosync-sf .sf-tab { min-width: 148px; padding: 10px 14px 14px; }
+  #byosync-sf .sf-tab .sf-sc-title { font-size: 14px; }
+  #byosync-sf .sf-theatre { padding: 16px 18px 24px; }
+  #byosync-sf .sf-dossier { padding: 20px; }
+  #byosync-sf .sf-stage { min-height: 520px; }
+}
+@media (max-width: 480px) {
+  #byosync-sf .sf-h2 { font-size: clamp(22px, 6.5vw, 32px); }
+  #byosync-sf .sf-subtitle { font-size: 14px; padding: 0 4px; }
+  #byosync-sf .sf-legend { gap: 12px 16px; font-size: 9px; }
+  #byosync-sf .sf-nav-arrow { width: 40px; font-size: 18px; }
 }
 `;
 

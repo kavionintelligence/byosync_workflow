@@ -46,13 +46,13 @@ export default function LandingPage() {
         <CodePreview />
 
       </main>
-      <div id="waitlist" className="scroll-mt-20"> 
+      <div id="waitlist" className="scroll-mt-24 md:scroll-mt-28">
           <WaitlistSection />
         </div>
 
       {/* 7. Footer: Minimal & Professional */}
-      <footer className="py-20 border-t border-blue-100/60 bg-white">
-      <div className="max-w-7xl mx-auto px-6 flex flex-col items-center gap-8">
+      <footer className="border-t border-blue-100/60 bg-white py-12 sm:py-20">
+      <div className="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 sm:gap-8 sm:px-6">
         
         {/* Logo & Name */}
         <div className="flex flex-col items-center gap-3 group">
@@ -76,7 +76,7 @@ export default function LandingPage() {
         </p>
 
         {/* Links */}
-        <div className="flex flex-wrap justify-center gap-x-8 gap-y-4 text-[11px] uppercase tracking-widest text-blue-600 font-semibold">
+        <div className="flex flex-wrap justify-center gap-x-6 gap-y-3 text-[10px] font-semibold uppercase tracking-widest text-blue-600 sm:gap-x-8 sm:text-[11px]">
           <a href="#" className="hover:text-blue-600 transition-colors">Privacy Framework</a>
           <a href="#" className="hover:text-blue-600 transition-colors">Developer Terms</a>
           <a href="#" className="hover:text-blue-600 transition-colors">Security Compliance</a>

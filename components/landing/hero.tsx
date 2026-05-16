@@ -18,36 +18,36 @@ export const Hero = () => {
 
   return (
     <header 
-      className="relative pt-32 pb-20 md:pt-48 md:pb-32 px-6 overflow-hidden min-h-screen flex items-center"
+      className="relative flex min-h-screen items-center overflow-x-clip px-4 pb-16 pt-28 sm:px-6 sm:pt-32 md:min-h-0 md:pb-24 md:pt-40 lg:pt-48"
       style={{ background: 'transparent' }}
     >
       <WaveBackground />
 
-      <div className="relative z-10 max-w-7xl mx-auto w-full">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
+      <div className="relative z-10 mx-auto w-full max-w-7xl">
+        <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
           
           {/* LEFT: CONTENT */}
           <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8 }}>
-            <Badge className="mb-6 bg-blue-50 border-blue-200/70 text-blue-700 py-1 px-4 text-xs font-mono backdrop-blur-md">
+            <Badge className="mb-4 border border-blue-200/70 bg-blue-50 px-3 py-1 text-[10px] font-mono text-blue-700 backdrop-blur-md sm:mb-6 sm:px-4 sm:text-xs">
               PROOF OF HUMAN PRESENCE INFRASTRUCTURE
             </Badge>
-            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter mb-6 leading-[1.05] text-blue-950">
+            <h1 className="mb-4 text-[clamp(1.85rem,5vw+1rem,4.5rem)] font-extrabold leading-[1.08] tracking-tighter text-blue-950 sm:mb-6">
               The Trust Bridge <br />
               <span className="text-blue-600">Between Users and Platforms.</span>
             </h1>
-            <p className="text-lg md:text-xl text-blue-800 mb-10 max-w-xl leading-relaxed">
+            <p className="mb-8 max-w-xl text-base leading-relaxed text-blue-800 sm:mb-10 sm:text-lg md:text-xl">
               Users control what they share. Platforms get the proof and data they need — with consent and logs built in.
             </p>
-            <div className="flex gap-4 items-center">
-              <Button size="lg" className="bg-blue-600 text-white hover:bg-blue-700 h-14 px-10 text-lg rounded-xl shadow-xl transition-transform active:scale-95">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+              <Button size="lg" className="h-12 rounded-xl bg-blue-600 px-8 text-base text-white shadow-xl hover:bg-blue-700 active:scale-95 sm:h-14 sm:px-10 sm:text-lg">
                 Join Waitlist
-                <ArrowRight className="ml-2 w-5 h-5" />
+                <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
             </div>
           </motion.div>
 
           {/* RIGHT: THE STABLE DEVICE CONTAINER */}
-          <div className="relative flex justify-center items-center h-[500px] w-full">
+          <div className="relative flex h-[min(520px,72vw)] w-full min-h-[280px] items-center justify-center sm:h-[480px] md:h-[500px]">
             <AnimatePresence mode="wait">
               {device === 'mobile' ? (
                 <motion.div 
@@ -59,7 +59,7 @@ export const Hero = () => {
                   className="absolute"
                 >
                   {/* MOBILE MOCKUP */}
-                  <div className="w-[260px] h-[520px] bg-slate-900/95 backdrop-blur-2xl rounded-[3rem] border-[8px] border-slate-800 shadow-2xl relative p-6 flex flex-col items-center">
+                  <div className="relative flex h-[min(520px,85vw)] w-[min(260px,78vw)] scale-90 flex-col items-center rounded-[3rem] border-[6px] border-slate-800 bg-slate-900/95 p-5 shadow-2xl backdrop-blur-2xl sm:scale-100 sm:border-[8px] sm:p-6">
                     <div className="w-20 h-6 bg-slate-800 absolute top-0 left-1/2 -translate-x-1/2 rounded-b-xl" />
                     <div className="mt-12 w-full space-y-6">
                       <div className="flex items-center gap-2 text-[10px] font-mono text-blue-300 uppercase tracking-widest">
@@ -99,10 +99,10 @@ export const Hero = () => {
                         </div>
                         <div className="text-[9px] font-mono text-slate-500">byosync_cloud_portal.exe</div>
                       </div>
-                      <div className="h-full flex flex-col items-center justify-center p-8">
-                         <div className="bg-blue-500/10 border border-blue-400/20 p-6 rounded-2xl flex items-center gap-6">
-                            <Laptop className="w-12 h-12 text-blue-400" />
-                            <div className="space-y-1">
+                    <div className="flex flex-col items-center justify-center p-4 sm:p-8 md:flex-row md:items-center md:gap-6">
+                         <div className="flex flex-col items-center gap-4 rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4 sm:flex-row sm:gap-6 sm:p-6">
+                            <Laptop className="h-10 w-10 text-blue-400 sm:h-12 sm:w-12" />
+                            <div className="space-y-1 text-center sm:text-left">
                                <p className="text-sm font-bold text-white">Trust Link Established</p>
                                <p className="text-[10px] text-slate-500 font-mono">NODE: BYO-LAPTOP-01</p>
                             </div>

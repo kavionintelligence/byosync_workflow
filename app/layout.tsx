@@ -14,6 +14,12 @@ export const metadata = {
   description: "Replacing OTPs and passwords across India's digital ecosystem with secure, token-based authentication.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover" as const,
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -21,7 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${openSans.variable}`}>
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased min-w-0 overflow-x-clip">
         {children}
       </body>
     </html>

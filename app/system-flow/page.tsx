@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function SystemFlowPage() {
   return (
-    <div className="min-h-screen bg-[#07080f] text-slate-50 overflow-x-hidden">
+    <div className="min-h-screen overflow-x-clip bg-[#07080f] text-slate-50">
       {/* Shared navigation bar from the main app */}
       <Navbar />
 
@@ -19,8 +19,8 @@ export default function SystemFlowPage() {
       <SystemFlowDemo />
 
       {/* Minimal footer */}
-      <footer className="py-10 border-t border-white/5 bg-[#07080f]">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-white/5 bg-[#07080f] py-8 sm:py-10">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6">
           <p className="text-slate-600 text-[10px] font-mono tracking-widest uppercase">
             © {new Date().getFullYear()} ByoSync Infrastructure Layer
           </p>

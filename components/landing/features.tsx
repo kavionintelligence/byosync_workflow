@@ -12,22 +12,22 @@ const FEATURE_DATA = [
 export const Features = () => {
   return (
     <section 
-      className="relative py-24 px-6 overflow-hidden"
+      className="relative overflow-x-clip py-16 md:py-24"
       style={{ background: 'transparent' }}
     >
-      <div className="relative z-10 max-w-7xl mx-auto px-6 h-10">
+      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6">
         <motion.p 
           initial={{ opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="text-center text-xs font-mono uppercase tracking-[0.3em] text-blue-500/80 mb-0"
+          className="mb-0 text-center text-[10px] font-mono uppercase tracking-[0.25em] text-blue-500/80 sm:text-xs sm:tracking-[0.3em]"
         >
           Foundational Trust Layer for Digital Bharat
         </motion.p>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="relative z-10 mx-auto mt-8 grid max-w-7xl grid-cols-1 gap-6 px-4 sm:mt-10 sm:px-6 md:grid-cols-3 md:gap-8">
         {FEATURE_DATA.map((f, i) => (
           <motion.div 
             key={i}
@@ -36,7 +36,7 @@ export const Features = () => {
             viewport={{ once: true }}
             transition={{ delay: i * 0.1, duration: 0.5 }}
             whileHover={{ y: -8, transition: { duration: 0.2 } }}
-            className="group relative p-8 rounded-[2rem] bg-white border border-blue-100 backdrop-blur-2xl shadow-md hover:shadow-xl transition-shadow"
+            className="group relative rounded-3xl border border-blue-100 bg-white p-6 shadow-md backdrop-blur-2xl transition-shadow hover:shadow-xl sm:rounded-[2rem] sm:p-8"
           >
             {/* Interactive Gradient Glow on Hover */}
             <div className="absolute inset-0 rounded-[2rem] bg-linear-to-br from-blue-100/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
@@ -45,13 +45,13 @@ export const Features = () => {
               {React.cloneElement(f.icon as React.ReactElement<any>, { size: 28 })}
             </div>
 
-            <h3 className="text-2xl font-bold mb-4 text-blue-950 tracking-tight">{f.title}</h3>
+            <h3 className="mb-3 text-xl font-bold tracking-tight text-blue-950 sm:mb-4 sm:text-2xl">{f.title}</h3>
             <p className="text-blue-800 text-sm leading-relaxed font-sans">
               {f.desc}
             </p>
 
             {/* Subtle bottom accent line */}
-            <div className="absolute bottom-6 left-8 right-8 h-px bg-linear-to-r from-blue-400/50 to-transparent scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left" />
+            <div className="absolute bottom-4 left-6 right-6 h-px origin-left scale-x-0 bg-linear-to-r from-blue-400/50 to-transparent transition-transform duration-500 group-hover:scale-x-100 sm:bottom-6 sm:left-8 sm:right-8" />
           </motion.div>
         ))}
       </div>
