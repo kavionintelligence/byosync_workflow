@@ -6,6 +6,17 @@ import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const DEMO_URL = "https://datasharing.byosync.in/";
+
+const navLinkBtn =
+  "h-auto rounded-full border border-transparent bg-transparent px-4 py-2 text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-blue-700 shadow-none transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 active:scale-[0.98] sm:tracking-[0.25em]";
+
+const navLinkBtnActive =
+  "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700";
+
+const navCtaBtn =
+  "h-auto rounded-full border border-blue-600 bg-blue-600 px-5 py-2 text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-white shadow-none transition-all hover:border-blue-700 hover:bg-blue-700 hover:text-white active:scale-[0.98] sm:px-6 sm:tracking-[0.25em]";
+
 export const Navbar = () => {
   const pathname = usePathname();
   const isSystemFlow = pathname === "/system-flow";
@@ -34,22 +45,24 @@ export const Navbar = () => {
         </Link>
 
         {/* Desktop */}
-        <div className="hidden items-center gap-4 md:flex md:gap-6">
-          <Link
-            href="/system-flow"
-            className={`text-[11px] font-mono uppercase tracking-[0.2em] transition-colors sm:tracking-[0.25em] ${
-              isSystemFlow
-                ? "text-blue-600"
-                : "text-blue-600/70 hover:text-blue-900"
-            }`}
+        <div className="hidden items-center gap-2 md:flex md:gap-3">
+          <Button asChild variant="ghost" className={navLinkBtn}>
+            <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
+              Demo
+            </a>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            className={`${navLinkBtn} ${isSystemFlow ? navLinkBtnActive : ""}`}
           >
-            System Flow
-          </Link>
-          <a href={isSystemFlow ? "/#waitlist" : "#waitlist"}>
-            <Button className="rounded-full bg-blue-600 px-5 font-semibold text-white hover:bg-blue-700 active:scale-95 sm:px-6">
+            <Link href="/system-flow">System Flow</Link>
+          </Button>
+          <Button asChild className={navCtaBtn}>
+            <a href={isSystemFlow ? "/#waitlist" : "#waitlist"}>
               Join Waitlist
-            </Button>
-          </a>
+            </a>
+          </Button>
         </div>
 
         {/* Mobile menu toggle */}
@@ -67,24 +80,38 @@ export const Navbar = () => {
       {/* Mobile panel */}
       {menuOpen ? (
         <div className="border-b border-blue-100/80 bg-white/98 px-4 py-4 shadow-sm md:hidden">
-          <div className="flex flex-col gap-3">
-            <Link
-              href="/system-flow"
-              className={`rounded-xl px-3 py-3 text-sm font-medium ${
-                isSystemFlow ? "bg-blue-50 text-blue-700" : "text-blue-900"
-              }`}
-              onClick={() => setMenuOpen(false)}
+          <div className="flex flex-col gap-2">
+            <Button
+              asChild
+              variant="ghost"
+              className={`${navLinkBtn} w-full justify-center`}
             >
-              System Flow
-            </Link>
-            <a
-              href={isSystemFlow ? "/#waitlist" : "#waitlist"}
-              onClick={() => setMenuOpen(false)}
+              <a
+                href={DEMO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMenuOpen(false)}
+              >
+                Demo
+              </a>
+            </Button>
+            <Button
+              asChild
+              variant="ghost"
+              className={`${navLinkBtn} w-full justify-center ${isSystemFlow ? navLinkBtnActive : ""}`}
             >
-              <Button className="w-full rounded-xl bg-blue-600 font-semibold text-white hover:bg-blue-700">
+              <Link href="/system-flow" onClick={() => setMenuOpen(false)}>
+                System Flow
+              </Link>
+            </Button>
+            <Button asChild className={`${navCtaBtn} w-full justify-center`}>
+              <a
+                href={isSystemFlow ? "/#waitlist" : "#waitlist"}
+                onClick={() => setMenuOpen(false)}
+              >
                 Join Waitlist
-              </Button>
-            </a>
+              </a>
+            </Button>
           </div>
         </div>
       ) : null}
