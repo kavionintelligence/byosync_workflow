@@ -201,12 +201,14 @@ export const WaitlistSection = () => {
                           className="h-14 pl-12 bg-white border-blue-200 text-blue-950 placeholder:text-blue-400 rounded-2xl focus:ring-blue-400 focus:border-blue-400/60 transition-all"
                         />
                       </div>
-                      <p className="text-xs text-blue-600/80 pl-1">
-                        LinkedIn is optional. Submissions are saved to{" "}
-                        <code className="font-mono text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                          data/waitlist.csv
+                      <p className="pl-1 text-xs leading-relaxed text-blue-600/80">
+                        LinkedIn is optional. Signups are stored in a CSV on this server (open in Excel)
+                        and sent to{" "}
+                        <strong className="text-blue-900">varun.k@byosync.in</strong> when{" "}
+                        <code className="rounded border border-blue-100 bg-blue-50 px-1 font-mono text-[10px]">
+                          RESEND_API_KEY
                         </code>{" "}
-                        on the server—open it in Excel.
+                        is set in the environment.
                       </p>
                     </div>
                     <Button
