@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   appendWaitlistRow,
-  notifyWaitlistByEmail,
+  deliverWaitlistNotifications,
   waitlistVercelReady,
 } from "@/lib/waitlist";
 
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Waitlist is not configured for this server. On Vercel, add Upstash Redis (UPSTASH_REDIS_REST_*) and/or Resend (RESEND_API_KEY) in Project → Settings → Environment Variables.",
+            "Waitlist is not configured. On Vercel: add RESEND_API_KEY (email to you) and/or Upstash Redis. See .env.example.",
         },
         { status: 503 },
       );
@@ -42,7 +42,10 @@ export async function POST(req: NextRequest) {
 
     await appendWaitlistRow(row);
 
-    void notifyWaitlistByEmail(row);
+    const delivery = await deliverWaitlistNotifications(row);
+    if (!delivery.ok) {
+      return NextResponse.json({ error: delivery.message }, { status: 502 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e) {

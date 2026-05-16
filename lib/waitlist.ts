@@ -17,6 +17,10 @@ export function hasUpstashRedis(): boolean {
   );
 }
 
+export function hasResend(): boolean {
+  return Boolean(process.env.RESEND_API_KEY?.trim());
+}
+
 function getRedis(): Redis | null {
   if (!hasUpstashRedis()) return null;
   return Redis.fromEnv();
@@ -83,7 +87,7 @@ export async function appendWaitlistRow(row: WaitlistPayload): Promise<void> {
 
   if (process.env.VERCEL === "1") {
     console.warn(
-      "[waitlist] Vercel: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set — signup not persisted to DB (use Resend email only or add Upstash).",
+      "[waitlist] Vercel: no Upstash Redis — signup not in database (use Resend email and/or add Redis).",
     );
     return;
   }
@@ -129,26 +133,29 @@ export async function buildWaitlistCsv(): Promise<string> {
   return header;
 }
 
-/** Vercel needs Redis and/or Resend or signups are not retained. */
+/**
+ * Vercel: need a real sink — email (Resend) and/or Redis export.
+ * Local dev: always OK (writes CSV).
+ */
 export function waitlistVercelReady(): boolean {
   if (process.env.VERCEL !== "1") return true;
-  return hasUpstashRedis() || Boolean(process.env.RESEND_API_KEY?.trim());
+  return hasUpstashRedis() || hasResend();
 }
 
-function storageNoteHtml(): string {
-  if (hasUpstashRedis()) {
-    return "This signup was stored in Upstash Redis (export CSV from your admin link).";
-  }
-  if (process.env.VERCEL === "1") {
-    return "Deployed on Vercel — ensure Upstash Redis and/or Resend is configured so signups are retained.";
-  }
-  return "This signup was appended to data/waitlist.csv on the server.";
+function persistedSomewhere(): boolean {
+  if (hasUpstashRedis()) return true;
+  if (process.env.VERCEL !== "1") return true;
+  return false;
 }
 
-/** Optional: notify via Resend when RESEND_API_KEY is set. Does not throw. */
-export async function notifyWaitlistByEmail(row: WaitlistPayload): Promise<void> {
+/**
+ * Send you a real email via Resend (works on Vercel).
+ * reply_to = applicant email so you can hit Reply in your inbox.
+ * Returns true if skipped (no API key), or Resend accepted the message.
+ */
+export async function notifyWaitlistByEmail(row: WaitlistPayload): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
+  if (!apiKey) return true;
 
   const to = (process.env.WAITLIST_NOTIFY_EMAIL || WAITLIST_NOTIFY_DEFAULT).trim();
   const from =
@@ -163,7 +170,10 @@ export async function notifyWaitlistByEmail(row: WaitlistPayload): Promise<void>
       <tr><td style="padding:6px 12px 6px 0;color:#64748b;">Phone</td><td>${escapeHtml(row.phone)}</td></tr>
       <tr><td style="padding:6px 12px 6px 0;color:#64748b;">LinkedIn</td><td>${row.linkedin ? escapeHtml(row.linkedin) : "—"}</td></tr>
     </table>
-    <p style="font-family:monospace;font-size:12px;color:#94a3b8;margin-top:16px;">${storageNoteHtml()}</p>
+    <p style="font-family:sans-serif;font-size:13px;color:#475569;margin-top:16px;">
+      <strong>Reply</strong> to this email goes to the applicant (${escapeHtml(row.email)}).
+    </p>
+    <p style="font-family:monospace;font-size:12px;color:#94a3b8;margin-top:8px;">${storageNoteHtml()}</p>
   `.trim();
 
   try {
@@ -176,17 +186,55 @@ export async function notifyWaitlistByEmail(row: WaitlistPayload): Promise<void>
       body: JSON.stringify({
         from,
         to: [to],
-        subject: `[ByoSync Waitlist] ${row.name}`,
+        reply_to: row.email,
+        subject: `[ByoSync Waitlist] ${row.name} — ${row.email}`,
         html,
       }),
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       console.error("[waitlist] Resend error:", res.status, errText);
+      return false;
     }
+    return true;
   } catch (e) {
     console.error("[waitlist] Resend request failed:", e);
+    return false;
   }
+}
+
+/** After a signup: fail the request if nothing was stored AND email did not send. */
+export async function deliverWaitlistNotifications(
+  row: WaitlistPayload,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const emailOk = await notifyWaitlistByEmail(row);
+  const stored = persistedSomewhere();
+
+  if (!emailOk && !stored) {
+    return {
+      ok: false,
+      message:
+        "Could not save or email this signup. Check RESEND_API_KEY / domain on Resend, or add Upstash Redis.",
+    };
+  }
+
+  if (!emailOk && stored) {
+    console.error(
+      "[waitlist] Resend failed but signup is in Redis/local file — follow up via export.",
+    );
+  }
+
+  return { ok: true };
+}
+
+function storageNoteHtml(): string {
+  if (hasUpstashRedis()) {
+    return "Also stored in Upstash Redis — export CSV from your /api/waitlist/export link.";
+  }
+  if (process.env.VERCEL === "1") {
+    return "Running on Vercel — add Upstash Redis if you also want a downloadable spreadsheet.";
+  }
+  return "Also appended to data/waitlist.csv on this machine.";
 }
 
 function escapeHtml(s: string): string {
