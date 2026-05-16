@@ -1,0 +1,290 @@
+================================================================================
+BYOSYNC — SYSTEM FLOW DEMO
+All steps & data flows as defined in: components/landing/system-flow-demo.tsx
+(Animated dossier text, narrations, and scenario SCENARIOS.)
+================================================================================
+
+FOUR ACTORS IN THE DIAGRAM
+--------------------------
+  1) USER PHONE        — Enrollment, biometrics, consent UI, signing.
+  2) BYOSYNC CONTROL PLANE — Identity registry, policy, tokens, KMS, audit;
+                            receives auth primitives and orchestrates consent;
+                            does NOT store personal KYC in the vault path.
+  3) USER VAULT (cloud) — Encrypted personal data & payment tokens;
+                          ciphertext + wrapped DEKs; direct from phone on
+                          enroll/update (ByoSync excluded from PII path).
+  4) COMPANY DESKTOP   — Partner console; sends requests; receives proofs
+                          (boolean JWS, SCA proof, webhooks); no PII by default.
+
+CORE SEPARATION (ARCHITECTURE SUMMARY — vault_inception header in source)
+---------------------------------------------------------------------------
+  ByoSync DB receives:
+    • Auth primitives only (helper_data, k2 commitment / derivative,
+      device public key, pseudonymous user_token, encrypted vault pointer).
+    • Later: consent ledger entries, boolean assertion / audit metadata,
+      signed proofs — not underlying field values.
+
+  User vault receives:
+    • ALL personal data fields (name, phone, email, DOB, address, KYC, etc.)
+      encrypted per-field (DEK per field, UMK wraps DEKs), sent DIRECTLY
+      from phone to vault. ByoSync is NOT in this data path.
+
+  Boolean / consent flows:
+    • ByoSync may fetch ciphertext from vault, compute answer in enclave,
+      sign JWS for company; plaintext wiped after compute.
+
+
+================================================================================
+SCENARIO 00 — VAULT INCEPTION (one-time setup) — 9 steps
+================================================================================
+Purpose: Register once with strict separation — auth → ByoSync; PII → vault.
+
+Step 01/09 — First launch — nothing stored yet
+  Flow: Phone (local UI only). Desktop may show “waiting”.
+  Narration: First open; itemised notice before capture; nothing stored yet.
+  Dossier: Zero-state start — DPDP notice before collection.
+
+Step 02/09 — Face + voice enrollment — on-device fuzzy extractor
+  Flow: Phone only (camera/mic → fuzzy extractor → helper_data + k2; raw zeroed).
+  Narration: Biometrics never leave device; helper_data non-reversible.
+
+Step 03/09 — Secure Enclave generates random User Master Key (UMK)
+  Flow: Phone Secure Enclave — random UMK; wrapped with k2 + device key;
+        face authorises release, does not derive UMK.
+
+Step 04/09 — Auth primitives → ByoSync DB · vault pointer registered
+  Flow: PHONE ──(TLS, auth primitives only)──► BYOSYNC
+        BYOSYNC ──(e.g. token issued / ack)──► COMPANY DESKTOP (illustrative)
+  Payload idea: device_pubkey, helper_data, k2_commitment, vault_ptr_enc,
+                nonce, attestation → response user_token. No name/phone/email.
+
+Step 05/09 — KYC data → encrypted on device → DIRECT to vault
+  Flow: PHONE ──(ciphertext + wrapped DEKs, direct PUT)──► USER VAULT
+        (No path through ByoSync for plaintext PII.)
+  Narration: Per-field DEK, AES-GCM, UMK wraps DEKs; ByoSync not in path.
+
+Step 06/09 — Vault inception complete · two separate stores
+  Flow: Conceptual — two stores: ByoSync (auth) + vault (PII ciphertext).
+  Phone still holds wrapped_UMK / keys in Enclave.
+
+Step 07/09 — Future: boolean assertion tokens → ByoSync DB
+  Flow (illustrative): BYOSYNC ◄──► VAULT (fetch ciphertext / return blob);
+        assertions & audit hashes live in ByoSync DB — not raw PII.
+
+Step 08/09 — Why this order is better — comparison
+  Flow: N/A (educational). Wrong: phone → ByoSync → vault (ByoSync sees PII).
+        Right: phone → vault direct + phone → ByoSync auth only.
+
+Step 09/09 — Vault inception done → all scenarios ready
+  Flow: Foundation set; switch to other scenarios for consent flows.
+
+
+================================================================================
+SCENARIO 01 — BOOLEAN PROOF (default) — 9 steps
+================================================================================
+Purpose: Company asks yes/no questions; never receives PII.
+
+Step 01/09 — User opens partner app
+  Flow: Phone shows partner + SDK; no network crypto yet.
+
+Step 02/09 — Local face + voice + liveness
+  Flow: Phone only — live_token from fuzzy extract; raw embeds zeroed.
+
+Step 03/09 — Secure Enclave releases User Master Key
+  Flow: Phone — UMK released after verify(live_token, helper, k2).
+
+Step 04/09 — Partner sends boolean request
+  Flow: COMPANY DESKTOP ──(POST /v1/access-request, mTLS)──► BYOSYNC
+  Body idea: user, purpose, fields[], mode boolean, expiry.
+
+Step 05/09 — User receives consent prompt
+  Flow: BYOSYNC ──(push / render payload)──► PHONE
+  User sees company, fields, purpose, expiry.
+
+Step 06/09 — User approves with face + voice
+  Flow: PHONE ──(POST /v1/consent/approve, signed intent)──► BYOSYNC
+
+Step 07/09 — ByoSync fetches encrypted blob from vault
+  Flow: BYOSYNC ──(scoped fetch)──► VAULT
+        VAULT ──(ciphertext + wrapped_DEK)──► BYOSYNC
+
+Step 08/09 — Compute → sign → return
+  Flow: Inside ByoSync enclave — decrypt in memory, compute booleans,
+        build JWS, zero plaintext/DEK.
+
+Step 09/09 — Company receives signed proof
+  Flow: BYOSYNC ──(JWS assertion)──► COMPANY DESKTOP
+        BYOSYNC ──(audit log event)──► VAULT side (audit packet in demo)
+
+
+================================================================================
+SCENARIO 02 — FACE-PAYMENT (PCI-aligned) — 11 steps
+================================================================================
+Purpose: SCA / 2FA bound to transaction; tokens in vault; PAN not at partner.
+
+Step 01/10 — User picks item, checkout
+  Flow: Partner has tok_card_* only; PAN encrypted in user vault.
+
+Step 02/10 — Partner sends payment intent to ByoSync
+  Flow: COMPANY DESKTOP ──(POST /v1/payment/intent, mTLS)──► BYOSYNC
+
+Step 03/10 — ByoSync pushes 2FA challenge to phone
+  Flow: BYOSYNC ──(SCA challenge / push)──► PHONE
+
+Step 04/10 — User reviews amount + merchant
+  Flow: Phone UI — intent visible for signing.
+
+Step 05/10 — Face + voice authentication runs
+  Flow: Phone — multi-modal liveness.
+
+Step 06/10 — Device signs the payment intent
+  Flow: PHONE ──(POST /v1/payment/auth)──► BYOSYNC
+
+Step 07/11 — ByoSync issues SCA proof token
+  Flow: BYOSYNC ──(JWS sca_proof)──► COMPANY DESKTOP
+
+Step 08/11 — Payment tokens committed to vault (first-save narrative)
+  Flow: PHONE ──(encrypted tokens)──► VAULT
+  Narration: Tokenize then encrypt; ByoSync holds vault pointer only.
+
+Step 09/11 — Partner submits to payment processor
+  Flow: COMPANY ──► PROCESSOR (off-demo); token + amount + sca_proof.
+
+Step 10/11 — Processor confirms · audit committed
+  Flow: Success UI; BYOSYNC ──(audit)──► vault/ledger side in demo.
+
+Step 11/11 — What this is — and isn’t
+  Flow: N/A — ByoSync is SCA / intent layer, not payment aggregator.
+
+
+================================================================================
+SCENARIO 03 — PLAINTEXT VIEW (high-risk) — 8 steps
+================================================================================
+Purpose: Rare path; employee + user consent; watermarked view; honest limits.
+
+Step 01/08 — Employee requests plaintext view
+  Flow: COMPANY DESKTOP ──(POST plaintext-request)──► (policy) toward ByoSync.
+
+Step 02/08 — Employee MFA inside the company
+  Flow: Desktop / employee device — RBAC + MFA before request leaves.
+
+Step 03/08 — Request → ByoSync control plane
+  Flow: COMPANY DESKTOP ──(POST /v1/access/plaintext, mTLS)──► BYOSYNC
+
+Step 04/08 — User receives high-risk prompt
+  Flow: BYOSYNC ──(high-risk consent)──► PHONE
+
+Step 05/08 — User approves · intent bound to employee
+  Flow: PHONE ──(signed approval)──► BYOSYNC
+
+Step 06/08 — Vault → enclave → watermarked render
+  Flow: BYOSYNC ──► VAULT (fetch ciphertext)
+        VAULT ──► BYOSYNC (encrypted blob)
+        BYOSYNC ──(watermarked stream)──► COMPANY DESKTOP
+
+Step 07/08 — Session expires · plaintext wiped
+  Flow: Enclave destroy; audit to vault side in demo.
+
+Step 08/08 — User dashboard updates with view receipt
+  Flow: BYOSYNC ──(receipt)──► PHONE
+
+
+================================================================================
+SCENARIO 04 — REVOKE CONSENT — 6 steps
+================================================================================
+Purpose: User revokes; future access blocked; company notified.
+
+Step 01/06 — User opens dashboard, sees active consents
+  Flow: PHONE ◄──(list active consents)── BYOSYNC (or cached + API).
+
+Step 02/06 — User taps “Revoke AcmePay”
+  Flow: PHONE ──(POST /v1/consent/revoke, signed)──► BYOSYNC
+
+Step 03/06 — ByoSync invalidates active grants
+  Flow: Internal — consent LEDGER update; sessions terminated.
+
+Step 04/06 — Webhook → company
+  Flow: BYOSYNC ──(signed webhook consent.revoked)──► COMPANY BACKEND (desktop demo)
+
+Step 05/06 — What revocation cannot do
+  Flow: N/A — legal/contractual boundary explained.
+
+Step 06/06 — Audit committed · user confirmed
+  Flow: BYOSYNC ──(audit)──► VAULT (demo packet); BYOSYNC ──► PHONE confirmation.
+
+
+================================================================================
+SCENARIO 05 — VAULT DATA UPDATE (KYC refresh) — 7 steps
+================================================================================
+Purpose: Same as enroll — PII direct to vault; ByoSync excluded; notify partners.
+
+Step 01/07 — User taps Update Profile
+  Flow: Phone — biometric gate before any read/write.
+
+Step 02/07 — Face + voice re-auth — UMK released
+  Flow: Phone only — k2 from live scan + helper_data → UMK unwrap.
+
+Step 03/07 — User edits fields — re-encrypted with fresh DEKs on device
+  Flow: Phone local — new DEKs, forward secrecy; old DEKs zeroed.
+
+Step 04/07 — Updated ciphertext → direct PUT to vault · ByoSync excluded
+  Flow: PHONE ──(direct PUT, v2 ciphertext)──► USER VAULT
+
+Step 05/07 — ByoSync fires data.updated webhook to consent holders
+  Flow: BYOSYNC ──(signed webhook data.updated)──► COMPANY DESKTOP
+
+Step 06/07 — Audit committed · version hash-chain incremented
+  Flow: BYOSYNC audit; vault version bump (narrative).
+
+Step 07/07 — Update complete · old DEKs gone
+  Flow: Phone — UMK re-sealed; old DEKs irrecoverable.
+
+
+================================================================================
+SCENARIO 06 — NEW DEVICE RECOVERY — 7 steps
+================================================================================
+Purpose: New device keypair; old device approves; UMK re-wrapped; registry update.
+
+Step 01/07 — User installs ByoSync on new phone — no keys present
+  Flow: New PHONE — user_token only; ByoSync looks up old device.
+
+Step 02/07 — New device generates fresh keypair in Secure Enclave
+  Flow: NEW PHONE ──(POST /v1/device/recover + new pubkey + attestation)──► BYOSYNC
+
+Step 03/07 — ByoSync sends approval request to the old device
+  Flow: BYOSYNC ──(push NEW_DEVICE_APPROVAL)──► OLD PHONE
+
+Step 04/07 — Old device approves · signs cross-device transfer
+  Flow: OLD PHONE ──(POST /v1/device/approve, transfer_sig)──► BYOSYNC
+
+Step 05/07 — ByoSync re-wraps UMK for new device · vault pointer migrated
+  Flow: BYOSYNC KMS (TEE) — unwrap with old binding, wrap to new_device_pubkey;
+        NEW PHONE ◄──(new_wrapped_UMK, vault_ptr_enc)── BYOSYNC
+
+Step 06/07 — ByoSync DB updated · new device registered
+  Flow: BYOSYNC DB — device_pubkey rotated; audit entry;
+        demo: audit packet toward vault illustration.
+
+Step 07/07 — Recovery complete · vault accessible from new device
+  Flow: NEW PHONE + VAULT — re-enroll biometrics locally; decrypt vault with UMK.
+
+
+================================================================================
+QUICK REFERENCE — WHO SENDS WHAT (BOOLEAN PATH)
+================================================================================
+  Company → ByoSync     : Access request (user id, fields, mode, mTLS).
+  ByoSync → User phone: Consent prompt.
+  User phone → ByoSync : Signed approval (intent + device signature).
+  ByoSync ↔ Vault      : Fetch ciphertext / wrapped keys (policy-bound).
+  ByoSync → Company    : Signed JWS assertion (booleans, no PII).
+
+QUICK REFERENCE — REGISTRATION / DATA UPDATE (PII)
+================================================================================
+  User phone → ByoSync : Auth primitives + vault pointer only (no PII).
+  User phone → Vault   : Encrypted KYC / updates DIRECTLY (ByoSync not in path).
+
+
+================================================================================
+END OF DOCUMENT
+Generated from scenario metadata in system-flow-demo.tsx (SCENARIOS object).
+================================================================================
