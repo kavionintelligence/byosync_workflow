@@ -51,9 +51,17 @@ export const WaitlistSection = () => {
           linkedin: formData.linkedin.trim(),
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        hint?: string;
+      };
       if (!res.ok) {
-        setSubmitError(data.error || "Something went wrong.");
+        const parts = [data.error, data.hint].filter(
+          (x): x is string => typeof x === "string" && x.length > 0,
+        );
+        setSubmitError(
+          parts.length ? parts.join("\n\n") : "Something went wrong.",
+        );
         setStatus("idle");
         return;
       }
@@ -149,7 +157,7 @@ export const WaitlistSection = () => {
 
                   <form onSubmit={handleSubmit} className="space-y-5">
                     {submitError && (
-                      <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+                      <div className="whitespace-pre-wrap rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                         {submitError}
                       </div>
                     )}

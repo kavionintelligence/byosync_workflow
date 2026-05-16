@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   appendWaitlistRow,
-  deliverWaitlistNotifications,
   waitlistVercelReady,
+  WAITLIST_VERCEL_SETUP_HINT,
 } from "@/lib/waitlist";
 
 export async function POST(req: NextRequest) {
@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
     if (!waitlistVercelReady()) {
       return NextResponse.json(
         {
-          error:
-            "Waitlist is not configured. On Vercel: add RESEND_API_KEY (email to you) and/or Upstash Redis. See .env.example.",
+          error: "Waitlist is not configured on this Vercel deployment.",
+          hint: WAITLIST_VERCEL_SETUP_HINT,
         },
         { status: 503 },
       );
@@ -40,11 +40,15 @@ export async function POST(req: NextRequest) {
 
     const row = { name, email, phone, linkedin };
 
-    await appendWaitlistRow(row);
-
-    const delivery = await deliverWaitlistNotifications(row);
-    if (!delivery.ok) {
-      return NextResponse.json({ error: delivery.message }, { status: 502 });
+    const saved = await appendWaitlistRow(row);
+    if (!saved) {
+      return NextResponse.json(
+        {
+          error: "Could not save this signup.",
+          hint: WAITLIST_VERCEL_SETUP_HINT,
+        },
+        { status: 502 },
+      );
     }
 
     return NextResponse.json({ ok: true });
