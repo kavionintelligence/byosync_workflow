@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Terminal } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, useState } from "react";
+import { Terminal, ChevronLeft, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 type Lang  = "kotlin" | "swift" | "react";
@@ -681,7 +681,7 @@ return Response.json({ received: true });`,
   },
 ];
 
-const STEP_PX = 320;
+const motionEase = [0.22, 1, 0.36, 1] as const;
 
 // ── Kotlin / Swift / React syntax colouring ───────────────────────────────────
 const KW_KOTLIN = /^(val|var|fun|class|data|object|suspend|when|if|else|return|import|for|in)\b/;
@@ -713,66 +713,56 @@ const LANGS: { id: Lang; label: string }[] = [
 
 // ── component ─────────────────────────────────────────────────────────────────
 export const CodePreview = () => {
-  const sectionRef = useRef<HTMLElement>(null);
-  const panelRef   = useRef<HTMLDivElement>(null);   // direct DOM for sticky — no React re-render per frame
   const [activeIdx, setActiveIdx] = useState(0);
-  const [lang, setLang]           = useState<Lang>("kotlin");
+  const [lang, setLang] = useState<Lang>("kotlin");
+  const last = SLIDES.length - 1;
 
-  // JS sticky via direct DOM (bypasses React reconciler on every scroll tick)
-  useEffect(() => {
-    let rafId = 0;
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const sec   = sectionRef.current;
-        const panel = panelRef.current;
-        if (!sec || !panel) return;
-
-        const rect     = sec.getBoundingClientRect();
-        const scrolled = -rect.top;
-        const viewH    = window.innerHeight;
-        const maxTop   = Math.max(0, sec.offsetHeight - viewH);
-        const newTop   = Math.min(Math.max(0, scrolled), maxTop);
-
-        // Direct style mutation — zero React overhead
-        panel.style.transform = `translateY(${newTop}px)`;
-
-        // Step index — only setState when it actually changes
-        const idx = scrolled <= 0
-          ? 0
-          : Math.min(Math.floor(scrolled / STEP_PX), SLIDES.length - 1);
-        setActiveIdx(prev => {
-          const next = Math.max(0, idx);
-          return prev === next ? prev : next;
-        });
-      });
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      cancelAnimationFrame(rafId);
-    };
+  const goPrev = useCallback(() => {
+    setActiveIdx((i) => Math.max(0, i - 1));
   }, []);
+  const goNext = useCallback(() => {
+    setActiveIdx((i) => Math.min(last, i + 1));
+  }, [last]);
 
-  const slide    = SLIDES[activeIdx];
-  const progress = SLIDES.length > 1 ? (activeIdx / (SLIDES.length - 1)) * 100 : 0;
-  const lines    = slide.codes[lang].split("\n");
+  const onDragEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      const swipe = info.offset.x + info.velocity.x * 0.22;
+      if (swipe < -64) goNext();
+      else if (swipe > 64) goPrev();
+    },
+    [goNext, goPrev],
+  );
+
+  const slide = SLIDES[activeIdx];
+  const lines = slide.codes[lang].split("\n");
+  const progressPct = last > 0 ? (activeIdx / last) * 100 : 100;
+
+  const arrowBtn =
+    "flex shrink-0 self-center h-9 w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-600 shadow-sm hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2";
 
   return (
-    <section
-      ref={sectionRef}
-      style={{ height: `calc(${SLIDES.length * STEP_PX}px + 100vh)` }}
-      className="relative"
-    >
-      {/* Panel — position:absolute top:0, then translateY is updated by the scroll listener */}
-      <div
-        ref={panelRef}
-        className="absolute top-0 w-full h-screen flex items-center py-10 px-6 overflow-hidden"
-        style={{ background: '#FFFFFF', willChange: "transform" }}
-      >
-        <div className="max-w-6xl mx-auto w-full grid lg:grid-cols-[1fr_1.2fr] gap-10 items-center">
+    <section className="relative overflow-hidden bg-white py-14 md:py-20">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <div className="flex items-stretch gap-1.5 sm:gap-3 md:gap-4">
+          <button
+            type="button"
+            className={arrowBtn}
+            aria-label="Previous integration step"
+            onClick={goPrev}
+            disabled={activeIdx === 0}
+          >
+            <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden />
+          </button>
+
+          <motion.div
+            drag="x"
+            dragDirectionLock
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.14}
+            onDragEnd={onDragEnd}
+            className="min-w-0 flex-1 cursor-grab active:cursor-grabbing"
+          >
+        <div className="grid lg:grid-cols-[1fr_1.2fr] gap-10 items-center">
 
           {/* ── LEFT ─────────────────────────────────────────────────── */}
           <div className="flex flex-col gap-5">
@@ -790,10 +780,10 @@ export const CodePreview = () => {
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeIdx}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.2 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.38, ease: motionEase }}
                 className="flex flex-col gap-3"
               >
                 <span
@@ -809,37 +799,40 @@ export const CodePreview = () => {
 
             {/* Progress dots + bar */}
             <div className="mt-1">
-              <div className="flex justify-between text-[11px] font-mono text-slate-500 mb-2">
+              <div className="mb-2 flex justify-between text-[11px] font-mono text-slate-500">
                 <span>{activeIdx + 1} / {SLIDES.length}</span>
-                    <span className="flex items-center gap-1 text-slate-400">
-                  <motion.span
-                    animate={{ y: [0, 3, 0] }}
-                    transition={{ repeat: Infinity, duration: 1.5 }}
-                    className="inline-block"
-                  >↓</motion.span>
-                  scroll through
-                </span>
+                <span className="hidden text-slate-400 sm:inline">Swipe or use arrows · tap dots</span>
+                <span className="sm:hidden">Swipe · dots</span>
               </div>
-              <div className="flex gap-1.5 items-center mb-2">
+              <div className="mb-2 flex flex-wrap gap-1.5">
                 {SLIDES.map((s, i) => (
-                  <motion.div
+                  <button
                     key={i}
-                    className="rounded-full"
-                    animate={{
-                      width:      i === activeIdx ? 20 : 5,
-                      height:     5,
-                      background: i === activeIdx ? s.color : "rgba(100,116,139,0.3)",
-                    }}
-                    transition={{ duration: 0.25 }}
-                  />
+                    type="button"
+                    aria-label={`Step ${i + 1}: ${s.title}`}
+                    aria-current={i === activeIdx ? "true" : undefined}
+                    onClick={() => setActiveIdx(i)}
+                    className="rounded-full p-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+                  >
+                    <motion.div
+                      className="block rounded-full"
+                      animate={{
+                        width:      i === activeIdx ? 20 : 5,
+                        height:     5,
+                        background: i === activeIdx ? s.color : "rgba(100,116,139,0.3)",
+                      }}
+                      transition={{ duration: 0.35, ease: motionEase }}
+                    />
+                  </button>
                 ))}
               </div>
-              <div className="h-px bg-blue-200 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: slide.color }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
+              <div className="h-px overflow-hidden rounded-full bg-blue-200">
+                <div
+                  className="h-full rounded-full transition-[width] duration-500 ease-out"
+                  style={{
+                    background: slide.color,
+                    width: `${progressPct}%`,
+                  }}
                 />
               </div>
             </div>
@@ -850,7 +843,7 @@ export const CodePreview = () => {
             <motion.div
               className="absolute -inset-1 rounded-2xl blur opacity-25"
               animate={{ background: `linear-gradient(135deg, ${slide.color}70, #3b82f670)` }}
-              transition={{ duration: 0.5 }}
+              transition={{ duration: 0.85, ease: motionEase }}
             />
             <div className="relative bg-[#0b0e14] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
 
@@ -879,7 +872,7 @@ export const CodePreview = () => {
                           layoutId="lang-pill"
                           className="absolute inset-0 rounded-md"
                           style={{ background: slide.color }}
-                          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                          transition={{ type: "spring", stiffness: 260, damping: 28 }}
                         />
                       )}
                       <span className="relative z-10">{l.label}</span>
@@ -894,7 +887,7 @@ export const CodePreview = () => {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.18 }}
+                    transition={{ duration: 0.28, ease: motionEase }}
                     className="text-[10px] font-mono text-slate-600 shrink-0"
                   >
                     {slide.num}
@@ -906,11 +899,11 @@ export const CodePreview = () => {
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`${activeIdx}-${lang}`}
-                  initial={{ opacity: 0, y: 6 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18 }}
-                  className="p-5 font-mono text-[12.5px] leading-relaxed overflow-y-auto"
+                  exit={{ opacity: 0, y: -3 }}
+                  transition={{ duration: 0.34, ease: motionEase }}
+                  className="p-5 font-mono text-[12.5px] leading-relaxed overflow-y-auto touch-pan-y"
                   style={{ maxHeight: "370px" }}
                 >
                   {lines.map((line, i) => (
@@ -927,7 +920,7 @@ export const CodePreview = () => {
                       className="w-1.5 h-1.5 rounded-full"
                       style={{ background: slide.color }}
                       animate={{ opacity: [1, 0.3, 1] }}
-                      transition={{ repeat: Infinity, duration: 1.6 }}
+                      transition={{ repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
                     />
                     <span className="text-[11px] font-mono tracking-widest" style={{ color: slide.color }}>
                       {slide.badge.replace(/ /g, "_")}_READY
@@ -939,6 +932,18 @@ export const CodePreview = () => {
             </div>
           </div>
 
+        </div>
+          </motion.div>
+
+          <button
+            type="button"
+            className={arrowBtn}
+            aria-label="Next integration step"
+            onClick={goNext}
+            disabled={activeIdx === last}
+          >
+            <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden />
+          </button>
         </div>
       </div>
     </section>

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, useState } from "react";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import {
   Lock, User, Building2, Activity, CheckCircle2, XCircle,
   Bell, Settings, BarChart3, Fingerprint, Eye,
   Clock, Shield, Key, RefreshCw, Webhook,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 // ── Screen metadata ────────────────────────────────────────────────────────────
@@ -100,8 +101,6 @@ const SCREENS: ScreenMeta[] = [
     ],
   },
 ];
-
-const STEP_PX = 560;
 
 // ── Shared sidebar ──────────────────────────────────────────────────────────────
 const USER_NAV = [
@@ -645,74 +644,66 @@ const AuditLog = () => (
 );
 
 // ── Main PlatformPreview component ─────────────────────────────────────────────
+const motionEase = [0.22, 1, 0.36, 1] as const;
+
 export const PlatformPreview = () => {
-  const sectionRef = useRef<HTMLElement>(null);
-  const panelRef   = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
+  const last = SCREENS.length - 1;
 
-  useEffect(() => {
-    let rafId = 0;
-    const onScroll = () => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const sec   = sectionRef.current;
-        const panel = panelRef.current;
-        if (!sec || !panel) return;
-
-        const rect     = sec.getBoundingClientRect();
-        const scrolled = -rect.top;
-        const viewH    = window.innerHeight;
-        const maxTop   = Math.max(0, sec.offsetHeight - viewH);
-        const newTop   = Math.min(Math.max(0, scrolled), maxTop);
-
-        panel.style.transform = `translateY(${newTop}px)`;
-
-        const idx = scrolled <= 0
-          ? 0
-          : Math.min(Math.floor(scrolled / STEP_PX), SCREENS.length - 1);
-        setActiveIdx(prev => {
-          const next = Math.max(0, idx);
-          return prev === next ? prev : next;
-        });
-      });
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      cancelAnimationFrame(rafId);
-    };
+  const goPrev = useCallback(() => {
+    setActiveIdx((i) => Math.max(0, i - 1));
   }, []);
+  const goNext = useCallback(() => {
+    setActiveIdx((i) => Math.min(last, i + 1));
+  }, [last]);
 
-  const screen   = SCREENS[activeIdx];
-  const progress = SCREENS.length > 1 ? (activeIdx / (SCREENS.length - 1)) * 100 : 0;
+  const onDragEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      const swipe = info.offset.x + info.velocity.x * 0.22;
+      if (swipe < -64) goNext();
+      else if (swipe > 64) goPrev();
+    },
+    [goNext, goPrev],
+  );
+
+  const screen = SCREENS[activeIdx];
+  const progressPct = last > 0 ? (activeIdx / last) * 100 : 100;
+
+  const arrowBtn =
+    "flex shrink-0 self-center h-9 w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-blue-600 shadow-sm hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2";
 
   return (
-    <section
-      ref={sectionRef}
-      style={{ height: `calc(${SCREENS.length * STEP_PX}px + 100vh)` }}
-      className="relative"
-    >
-      <div
-        ref={panelRef}
-        className="absolute top-0 w-full h-screen flex items-center py-8 px-6 overflow-hidden"
-        style={{
-          background: "#FFFFFF",
-          willChange: "transform",
-        }}
-      >
-        <div className="max-w-6xl mx-auto w-full">
+    <section className="relative overflow-hidden bg-white py-14 md:py-20">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
 
           {/* Section header */}
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="h-px flex-1 max-w-16 bg-blue-200/60" />
+          <div className="mb-8 flex items-center justify-center gap-3">
+            <div className="h-px max-w-16 flex-1 bg-blue-200/60" />
             <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-blue-500">
               Platform Experience
             </span>
-            <div className="h-px flex-1 max-w-16 bg-blue-200/60" />
+            <div className="h-px max-w-16 flex-1 bg-blue-200/60" />
           </div>
 
+          <div className="flex items-stretch gap-1.5 sm:gap-3 md:gap-4">
+            <button
+              type="button"
+              className={arrowBtn}
+              aria-label="Previous screen"
+              onClick={goPrev}
+              disabled={activeIdx === 0}
+            >
+              <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden />
+            </button>
+
+            <motion.div
+              drag="x"
+              dragDirectionLock
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.14}
+              onDragEnd={onDragEnd}
+              className="min-w-0 flex-1 cursor-grab active:cursor-grabbing"
+            >
           <div className="grid lg:grid-cols-[1fr_1.5fr] gap-10 items-center">
 
             {/* ── Left: metadata ── */}
@@ -720,10 +711,10 @@ export const PlatformPreview = () => {
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeIdx}
-                  initial={{ opacity: 0, y: 12 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  transition={{ duration: 0.22 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.38, ease: motionEase }}
                   className="flex flex-col gap-4"
                 >
                   {/* Perspective pills */}
@@ -773,36 +764,40 @@ export const PlatformPreview = () => {
 
                   {/* Progress */}
                   <div className="mt-1">
-                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-2">
+                    <div className="mb-2 flex justify-between text-[11px] font-mono text-slate-400">
                       <span>{activeIdx + 1} / {SCREENS.length}</span>
-                      <motion.span
-                        animate={{ y: [0, 3, 0] }}
-                        transition={{ repeat: Infinity, duration: 1.5 }}
-                        className="flex items-center gap-1"
-                      >
-                        ↓ scroll through
-                      </motion.span>
+                      <span className="hidden text-slate-400 sm:inline">Swipe or use arrows · tap dots</span>
+                      <span className="sm:hidden">Swipe · dots</span>
                     </div>
-                    <div className="flex gap-1.5 mb-2">
+                    <div className="mb-2 flex flex-wrap gap-1.5">
                       {SCREENS.map((s, i) => (
-                        <motion.div
+                        <button
                           key={i}
-                          className="rounded-full"
-                          animate={{
-                            width:      i === activeIdx ? 20 : 5,
-                            height:     5,
-                            background: i === activeIdx ? s.color : "rgba(0,0,0,0.1)",
-                          }}
-                          transition={{ duration: 0.25 }}
-                        />
+                          type="button"
+                          aria-label={`Screen ${i + 1}: ${s.title}`}
+                          aria-current={i === activeIdx ? "true" : undefined}
+                          onClick={() => setActiveIdx(i)}
+                          className="rounded-full p-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+                        >
+                          <motion.div
+                            className="block rounded-full"
+                            animate={{
+                              width:      i === activeIdx ? 20 : 5,
+                              height:     5,
+                              background: i === activeIdx ? s.color : "rgba(0,0,0,0.1)",
+                            }}
+                            transition={{ duration: 0.35, ease: motionEase }}
+                          />
+                        </button>
                       ))}
                     </div>
-                    <div className="h-px bg-blue-200 rounded-full overflow-hidden">
-                      <motion.div
-                        className="h-full rounded-full"
-                        style={{ background: screen.color }}
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 0.3, ease: "easeOut" }}
+                    <div className="h-px overflow-hidden rounded-full bg-blue-200">
+                      <div
+                        className="h-full rounded-full transition-[width] duration-500 ease-out"
+                        style={{
+                          background: screen.color,
+                          width: `${progressPct}%`,
+                        }}
                       />
                     </div>
                   </div>
@@ -816,7 +811,7 @@ export const PlatformPreview = () => {
               <motion.div
                 className="absolute -inset-6 rounded-3xl blur-3xl opacity-20"
                 animate={{ background: `radial-gradient(circle at 50% 50%, ${screen.color}, transparent 70%)` }}
-                transition={{ duration: 0.6 }}
+                transition={{ duration: 0.85, ease: motionEase }}
               />
 
               <div className="relative">
@@ -841,7 +836,7 @@ export const PlatformPreview = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15 }}
+                        transition={{ duration: 0.28, ease: motionEase }}
                         className="text-[8px] font-mono text-slate-400 shrink-0"
                       >
                         {screen.num}
@@ -854,10 +849,10 @@ export const PlatformPreview = () => {
                     <AnimatePresence mode="wait">
                       <motion.div
                         key={activeIdx}
-                        initial={{ opacity: 0, y: 5 }}
+                        initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -5 }}
-                        transition={{ duration: 0.18 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.36, ease: motionEase }}
                         className="absolute inset-0 overflow-hidden"
                       >
                         {activeIdx === 0 && <VaultHome />}
@@ -878,7 +873,18 @@ export const PlatformPreview = () => {
             </div>
 
           </div>
-        </div>
+            </motion.div>
+
+            <button
+              type="button"
+              className={arrowBtn}
+              aria-label="Next screen"
+              onClick={goNext}
+              disabled={activeIdx === last}
+            >
+              <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden />
+            </button>
+          </div>
       </div>
     </section>
   );

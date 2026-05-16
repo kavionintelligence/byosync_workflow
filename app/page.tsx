@@ -18,7 +18,7 @@ import Image from "next/image";
 export default function LandingPage() {
   return (
       <div
-        className="relative min-h-screen bg-white text-blue-950 selection:bg-blue-200/50 overflow-x-hidden"
+        className="relative min-h-screen bg-white text-blue-950 selection:bg-blue-200/50 overflow-x-clip"
       >
       
       {/* 1. Navigation Header */}
