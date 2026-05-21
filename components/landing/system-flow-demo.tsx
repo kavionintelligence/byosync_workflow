@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const SCENE_W = 1280;
+const SCENE_H = 780;
+const ZOOM_MIN = 0.38;
+const ZOOM_MAX = 1.55;
+const ZOOM_STEP = 1.14;
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SystemFlowDemo — embedded on the landing page.
@@ -29,9 +35,9 @@ const SF_CSS = `
 /* ── section header ─────────────────────────────────── */
 #byosync-sf .sf-header {
   position: relative; z-index: 1;
-  padding: 64px 56px 40px;
+  padding: 36px 40px 20px;
   text-align: center;
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
   border-bottom: 1px solid rgba(34, 211, 238, 0.22);
 }
@@ -98,20 +104,20 @@ const SF_CSS = `
 }
 #byosync-sf .sf-nav-arrow[data-hidden="true"] { opacity: 0; pointer-events: none; }
 #byosync-sf .sf-scenarios {
-  padding: 28px 56px 0;
+  padding: 16px 40px 0;
   display: flex; gap: 0;
   border-bottom: 1px solid rgba(34, 211, 238, 0.18);
   overflow-x: auto; scrollbar-width: none;
 }
 #byosync-sf .sf-scenarios::-webkit-scrollbar { display: none; }
 #byosync-sf .sf-tab {
-  flex: 0 0 auto; padding: 16px 28px 20px;
+  flex: 0 0 auto; padding: 12px 18px 14px;
   background: transparent; border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer; text-align: left;
   color: rgba(148, 163, 184, 0.88);
   transition: color 0.2s, border-color 0.2s;
-  min-width: 210px;
+  min-width: 168px;
 }
 #byosync-sf .sf-tab:hover { color: #cbd5e1; }
 #byosync-sf .sf-tab.sf-active { color: #f1f5f9; border-bottom-color: #22d3ee; }
@@ -131,20 +137,28 @@ const SF_CSS = `
 /* ── stage layout ───────────────────────────────────── */
 #byosync-sf .sf-stage {
   position: relative; z-index: 1;
-  display: grid; grid-template-columns: 1fr 400px;
-  gap: 0; min-height: 860px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 36%);
+  gap: 0;
+  min-height: 0;
+  height: clamp(480px, calc(100vh - 220px), 780px);
   background: #020617;
+  align-items: stretch;
 }
 #byosync-sf .sf-theatre {
-  padding: 28px 36px 36px 56px;
+  padding: 12px 16px 14px 32px;
   overflow: hidden;
   background: #020617;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* ── controls bar ───────────────────────────────────── */
 #byosync-sf .sf-controls {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 24px; padding: 12px 18px;
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px; padding: 8px 12px;
+  flex-shrink: 0; flex-wrap: wrap;
   background: rgba(2, 6, 23, 0.94);
   border: 1px solid rgba(34, 211, 238, 0.22);
   border-radius: 12px; backdrop-filter: blur(20px);
@@ -174,7 +188,22 @@ const SF_CSS = `
   font-size: 10.5px; color: rgba(186, 230, 253, 0.72); letter-spacing: 0.08em;
 }
 #byosync-sf .sf-step-meter strong {
-  font-size: 20px; color: #ffffff; font-weight: 700; letter-spacing: 0;
+  font-size: 16px; color: #ffffff; font-weight: 700; letter-spacing: 0;
+}
+#byosync-sf .sf-zoom-controls {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.6);
+}
+#byosync-sf .sf-zoom-btn {
+  padding: 6px 10px !important; min-width: 32px; justify-content: center;
+}
+#byosync-sf .sf-zoom-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px; color: rgba(186, 230, 253, 0.75);
+  min-width: 40px; text-align: center; letter-spacing: 0.06em;
 }
 #byosync-sf .sf-kbd-hint {
   font-family: "JetBrains Mono", monospace;
@@ -200,13 +229,35 @@ const SF_CSS = `
 /* ── scene frame ────────────────────────────────────── */
 #byosync-sf .sf-scene-frame {
   position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: rgba(0,10,32,0.7);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
-  padding: 24px 20px 28px;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 20px 50px rgba(0,0,0,0.4);
+  border-radius: 12px;
+  padding: 8px 10px 10px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 12px 32px rgba(0,0,0,0.35);
   overflow: hidden;
   backdrop-filter: blur(10px);
+}
+#byosync-sf .sf-scene-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(0, 8, 28, 0.45);
+  cursor: grab;
+}
+#byosync-sf .sf-scene-viewport.sf-panning { cursor: grabbing; }
+#byosync-sf .sf-scene-inner {
+  transform-origin: center center;
+  transition: transform 0.18s ease;
+  line-height: 0;
+  flex-shrink: 0;
 }
 #byosync-sf .sf-scene-frame::before {
   content: ""; position: absolute; inset: 0; pointer-events: none;
@@ -217,18 +268,28 @@ const SF_CSS = `
   mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 20%, transparent 80%);
 }
 #byosync-sf svg.sf-scene {
-  width: 100%; height: auto; display: block; position: relative; z-index: 1;
+  width: 1280px;
+  height: 780px;
+  display: block;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
 }
 
-/* ── narration ──────────────────────────────────────── */
+/* ── narration (above diagram) ──────────────────────── */
 #byosync-sf .sf-narration {
-  margin-top: 20px; padding: 18px 22px;
+  margin: 0 0 8px; padding: 10px 14px;
   background: rgba(0,16,48,0.5);
   border: 1px solid rgba(255,255,255,0.1);
   border-left: 3px solid #22d3ee;
-  border-radius: 10px;
-  font-size: 15px; font-style: italic;
-  line-height: 1.6; color: rgba(207,250,254,0.85);
+  border-radius: 8px;
+  font-size: 13px; font-style: italic;
+  line-height: 1.45; color: rgba(207,250,254,0.85);
+  flex-shrink: 0;
+  overflow: visible;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 #byosync-sf .sf-narration::before {
   content: "Live narration"; display: block;
@@ -238,20 +299,40 @@ const SF_CSS = `
 }
 #byosync-sf .sf-narration strong { font-style: normal; color: #67e8f9; }
 
-/* ── dossier panel ──────────────────────────────────── */
+/* ── dossier panel (narration + step detail) ───────── */
 #byosync-sf .sf-dossier {
+  display: flex;
+  flex-direction: column;
   background: #020617;
   border-left: 1px solid rgba(34, 211, 238, 0.18);
-  padding: 28px 28px 36px;
-  overflow-y: auto; max-height: 100vh;
-  position: sticky; top: 0;
+  padding: 14px 16px 18px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  max-height: none;
+  height: 100%;
   backdrop-filter: blur(12px);
+}
+#byosync-sf .sf-narration-in-panel {
+  flex-shrink: 0;
+  margin: 0 0 10px;
+  max-height: none;
+  overflow: visible;
+}
+#byosync-sf .sf-narration-in-panel::before {
+  margin-bottom: 6px;
+}
+#byosync-sf #sf-dossierBody {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: visible;
 }
 #byosync-sf .sf-dossier::-webkit-scrollbar { width: 4px; }
 #byosync-sf .sf-dossier::-webkit-scrollbar-thumb {
   background: rgba(255,255,255,0.15); border-radius: 2px;
 }
 #byosync-sf .sf-dossier-head {
+  flex-shrink: 0;
   font-family: "JetBrains Mono", monospace; font-size: 9.5px;
   letter-spacing: 0.35em; text-transform: uppercase;
   color: #22d3ee; margin-bottom: 14px;
@@ -266,8 +347,8 @@ const SF_CSS = `
 #byosync-sf .sf-entry {
   background: rgba(15, 23, 42, 0.72);
   border: 1px solid rgba(34, 211, 238, 0.16);
-  border-radius: 12px; padding: 18px 20px; margin-bottom: 14px;
-  position: relative; overflow: hidden;
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+  position: relative; overflow: visible;
 }
 #byosync-sf .sf-entry::before {
   content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
@@ -278,11 +359,11 @@ const SF_CSS = `
   letter-spacing: 0.3em; color: rgba(125, 211, 252, 0.72); text-transform: uppercase;
 }
 #byosync-sf .sf-entry-title {
-  font-size: 20px; font-weight: 800; line-height: 1.2;
-  margin: 6px 0 10px; color: #ffffff; letter-spacing: -0.01em;
+  font-size: 16px; font-weight: 800; line-height: 1.2;
+  margin: 4px 0 8px; color: #ffffff; letter-spacing: -0.01em;
 }
 #byosync-sf .sf-entry-title em { font-style: italic; color: #67e8f9; }
-#byosync-sf .sf-entry-desc { font-size: 13px; line-height: 1.6; color: rgba(226, 232, 240, 0.9); }
+#byosync-sf .sf-entry-desc { font-size: 12px; line-height: 1.5; color: rgba(226, 232, 240, 0.9); }
 #byosync-sf .sf-entry-desc strong { color: #ffffff; font-weight: 700; }
 
 /* crypto block */
@@ -326,7 +407,8 @@ const SF_CSS = `
 /* ── SVG animation helpers ──────────────────────────── */
 #byosync-sf .sf-node-active rect.sf-body,
 #byosync-sf .sf-node-active rect.sf-frame,
-#byosync-sf .sf-node-active path.sf-frame {
+#byosync-sf .sf-node-active path.sf-frame,
+#byosync-sf #sf-node-enclave.sf-node-active rect.sf-frame {
   filter: drop-shadow(0 0 16px currentColor);
   stroke-dasharray: 5 4;
   animation: sf-dash 0.9s linear infinite;
@@ -337,13 +419,181 @@ const SF_CSS = `
   0%   { r: 5; opacity: 0.85; }
   100% { r: 28; opacity: 0; }
 }
+#byosync-sf .sf-flow-stroke {
+  filter: url(#sf-flow-glow);
+  pointer-events: none;
+}
+#byosync-sf .sf-flow-trail {
+  pointer-events: none;
+}
+#byosync-sf .sf-route-line.sf-route-lit {
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.65));
+}
+
+/* User agent + A2A paths only for scenario 06 (agent-to-agent) */
+#byosync-sf #sf-node-userAgent,
+#byosync-sf #sf-lines-a2a,
+#byosync-sf #sf-guide-a2a {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+#byosync-sf.sf-scene-a2a #sf-node-userAgent {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+#byosync-sf.sf-scene-a2a #sf-lines-a2a {
+  opacity: 0.55;
+  pointer-events: none;
+  visibility: visible;
+}
+#byosync-sf.sf-scene-a2a #sf-guide-a2a {
+  opacity: 1;
+  visibility: visible;
+}
+#byosync-sf .sf-legend-a2a-row { display: none; }
+#byosync-sf.sf-scene-a2a .sf-legend-a2a-row { display: flex; }
+
+/* ── fullscreen (/system-flow): one screen, diagram-first ── */
+#byosync-sf.sf-fullscreen {
+  height: calc(100vh - 3.5rem);
+  min-height: 520px;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#byosync-sf.sf-fullscreen .sf-header { display: none; }
+#byosync-sf.sf-fullscreen .sf-top-strip {
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.15);
+  background: rgba(2, 6, 23, 0.95);
+}
+#byosync-sf.sf-fullscreen .sf-legend {
+  margin: 0;
+  padding: 6px 16px 4px;
+  gap: 10px 14px;
+  font-size: 8px;
+  justify-content: flex-start;
+}
+#byosync-sf.sf-fullscreen .sf-nav-wrap { flex-shrink: 0; }
+#byosync-sf.sf-fullscreen .sf-scenarios {
+  padding: 0 36px;
+  border-bottom: none;
+}
+#byosync-sf.sf-fullscreen .sf-tab {
+  min-width: 0;
+  padding: 6px 12px 8px;
+}
+#byosync-sf.sf-fullscreen .sf-tab .sf-sc-num { font-size: 8px; letter-spacing: 0.2em; }
+#byosync-sf.sf-fullscreen .sf-tab .sf-sc-title { font-size: 12px; margin-top: 2px; }
+#byosync-sf.sf-fullscreen .sf-tab .sf-sc-desc { display: none; }
+#byosync-sf.sf-fullscreen .sf-tab.sf-active .sf-sc-desc {
+  display: block;
+  font-size: 9px;
+  margin-top: 2px;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#byosync-sf.sf-fullscreen .sf-stage {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 38%);
+  align-items: stretch;
+}
+#byosync-sf.sf-fullscreen .sf-theatre {
+  padding: 6px 10px 8px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#byosync-sf.sf-fullscreen .sf-controls {
+  margin-bottom: 4px;
+  padding: 5px 8px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+#byosync-sf.sf-fullscreen .sf-btn { padding: 6px 10px; font-size: 9px; }
+#byosync-sf.sf-fullscreen .sf-kbd-hint { display: none; }
+#byosync-sf.sf-fullscreen .sf-scene-frame {
+  flex: 1;
+  min-height: 180px;
+}
+#byosync-sf.sf-fullscreen .sf-narration-in-panel {
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#byosync-sf.sf-fullscreen .sf-narration-in-panel::before { font-size: 9px; }
+#byosync-sf.sf-fullscreen .sf-dossier {
+  padding: 10px 12px 12px;
+}
+#byosync-sf.sf-fullscreen .sf-dossier-head {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+  font-size: 9px;
+}
+#byosync-sf.sf-fullscreen .sf-entry-title {
+  font-size: 14px;
+}
+#byosync-sf.sf-fullscreen .sf-entry-desc {
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+#byosync-sf.sf-fullscreen .sf-crypto-block {
+  font-size: 10px;
+  line-height: 1.6;
+}
+#byosync-sf.sf-fullscreen .sf-resp-block {
+  font-size: 11px;
+  line-height: 1.5;
+}
+#byosync-sf.sf-fullscreen .sf-zoom-btn {
+  min-width: 28px;
+  padding: 5px 8px !important;
+  font-size: 14px !important;
+  line-height: 1;
+}
+#byosync-sf.sf-fullscreen .sf-zoom-fit {
+  font-size: 9px !important;
+  letter-spacing: 0.12em;
+  padding: 5px 8px !important;
+}
 
 /* ── responsive ─────────────────────────────────────── */
 @media (max-width: 1280px) {
-  #byosync-sf .sf-stage { grid-template-columns: 1fr; min-height: 720px; }
-  #byosync-sf .sf-dossier {
-    border-left: none; border-top: 1px solid rgba(34, 211, 238, 0.18);
-    position: static; max-height: none;
+  #byosync-sf.sf-embedded .sf-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 40%);
+    height: clamp(520px, calc(100vh - 200px), 820px);
+  }
+}
+@media (max-width: 960px) {
+  #byosync-sf.sf-embedded .sf-stage {
+    grid-template-columns: 1fr;
+    height: auto;
+    max-height: none;
+  }
+  #byosync-sf.sf-embedded .sf-theatre { min-height: clamp(360px, 52vh, 560px); }
+  #byosync-sf.sf-embedded .sf-dossier {
+    border-left: none;
+    border-top: 1px solid rgba(34, 211, 238, 0.18);
+    max-height: none;
+    min-height: 280px;
+    height: auto;
+  }
+  #byosync-sf.sf-fullscreen .sf-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 40%);
+  }
+  #byosync-sf.sf-fullscreen .sf-dossier {
+    max-height: none;
+    height: 100%;
+    border-left: 1px solid rgba(34, 211, 238, 0.18);
+    border-top: none;
   }
 }
 @media (max-width: 1024px) {
@@ -368,8 +618,66 @@ const SF_CSS = `
 }
 `;
 
-export const SystemFlowDemo = () => {
+type SystemFlowDemoProps = { mode?: "embedded" | "fullscreen" };
+
+export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
+  const isFullscreen = mode === "fullscreen";
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(0.62);
+
+  const computeFitZoom = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp) return 0.62;
+    const pad = 12;
+    const w = Math.max(160, vp.clientWidth - pad);
+    const h = Math.max(160, vp.clientHeight - pad);
+    return Math.min(w / SCENE_W, h / SCENE_H, 1) * 0.96;
+  }, []);
+
+  const zoomIn = useCallback(() => {
+    setZoom((z) => Math.min(ZOOM_MAX, z * ZOOM_STEP));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoom((z) => Math.max(ZOOM_MIN, z / ZOOM_STEP));
+  }, []);
+
+  const zoomFit = useCallback(() => {
+    setZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, computeFitZoom())));
+  }, [computeFitZoom]);
+
+  useEffect(() => {
+    const t1 = window.setTimeout(zoomFit, isFullscreen ? 280 : 120);
+    const t2 = isFullscreen ? window.setTimeout(zoomFit, 750) : undefined;
+    return () => {
+      window.clearTimeout(t1);
+      if (t2) window.clearTimeout(t2);
+    };
+  }, [zoomFit, isFullscreen]);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = "";
+      document.body.style.overflow = "";
+    };
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      if (e.deltaY < 0) zoomIn();
+      else zoomOut();
+    };
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    return () => vp.removeEventListener("wheel", onWheel);
+  }, [zoomIn, zoomOut]);
 
   useEffect(() => {
     const containerOrNull = containerRef.current;
@@ -387,20 +695,39 @@ export const SystemFlowDemo = () => {
     let playing = false;
     let playTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    /* ── device geometry ── */
+    /* ── device geometry (v3) ──
+       Center spine: ByoSync DB → Nitro enclave → User vault
+       Right: Company A (top) · Company B (bottom) · lineage A→B via enclave
+       Left-mid: User Agent (A2A client) between phone and DB
+    */
     const DEVICES: Record<string, { cx: number; cy: number; w: number; h: number; colorHex: string }> = {
-      phone:    { cx:200,  cy:380, w:230, h:460, colorHex:"#5dc97e" },
-      byosync:  { cx:640,  cy:320, w:320, h:260, colorHex:"#2563eb" },
-      desktop:  { cx:1080, cy:380, w:360, h:280, colorHex:"#38bdf8" },
-      vault:    { cx:640,  cy:645, w:340, h:165, colorHex:"#00e5d3" },
+      phone:     { cx:130,  cy:448, w:200, h:400, colorHex:"#5dc97e" },
+      userAgent: { cx:348,  cy:268, w:152, h:96,  colorHex:"#a78bfa" },
+      byosync:   { cx:600,  cy:128, w:264, h:152, colorHex:"#2563eb" },
+      enclave:   { cx:600,  cy:358, w:252, h:100, colorHex:"#f472b6" },
+      vault:     { cx:600,  cy:648, w:300, h:130, colorHex:"#00e5d3" },
+      desktop:   { cx:1040, cy:228, w:280, h:190, colorHex:"#38bdf8" },
+      companyB:  { cx:1040, cy:538, w:248, h:92,  colorHex:"#94a3b8" },
     };
     const ANCHOR: Record<string, { x:number; y:number }> = {
-      phone:    { x:320, y:380 },
-      byoLeft:  { x:480, y:320 },
-      byoRight: { x:800, y:320 },
-      byoBottom:{ x:640, y:450 },
-      desktop:  { x:900, y:380 },
-      vaultTop: { x:640, y:562 },
+      phone:       { x:230, y:448 },
+      agent:       { x:348, y:268 },
+      agentRight:  { x:424, y:268 },
+      agentBottom: { x:348, y:316 },
+      byoLeft:     { x:468, y:118 },
+      byoRight:    { x:732, y:118 },
+      byoBottom:   { x:600, y:196 },
+      enclave:     { x:600, y:358 },
+      enclaveLeft: { x:484, y:358 },
+      enclaveRight:{ x:716, y:358 },
+      enclaveTop:  { x:600, y:308 },
+      enclaveBottom:{ x:600, y:408 },
+      desktop:     { x:900, y:228 },
+      desktopLeft: { x:900, y:228 },
+      coB:         { x:900, y:538 },
+      coBLeft:     { x:916, y:538 },
+      vaultTop:    { x:600, y:583 },
+      vaultBottom: { x:600, y:713 },
     };
 
     /* ── svg helpers ── */
@@ -470,6 +797,10 @@ export const SystemFlowDemo = () => {
           <stop offset="70%"  stop-color="#3b82f6" stop-opacity="0.8"/>
           <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0"/>
         </linearGradient>
+        <linearGradient id="sf-enclaveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#3b1034" stop-opacity="0.98"/>
+          <stop offset="100%" stop-color="#1a0a18" stop-opacity="0.98"/>
+        </linearGradient>
 
         <!-- glow = blur only, drawn behind shape -->
         <filter id="sf-glow" x="-50%" y="-50%" width="200%" height="200%">
@@ -481,26 +812,168 @@ export const SystemFlowDemo = () => {
         </filter>
         <filter id="sf-glow-strong" x="-80%" y="-80%" width="260%" height="260%">
           <feGaussianBlur stdDeviation="14"/>
+        </filter>
+        <filter id="sf-flow-glow" x="-120%" y="-120%" width="340%" height="340%">
+          <feGaussianBlur stdDeviation="5" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>`;
       scene.appendChild(defs);
 
+      drawFlowGuide();
       drawConnectionLines();
-      drawByoSyncCloud();
       drawVault();
-      drawPhone();
+      drawEnclave();
+      drawByoSyncCloud();
+      drawCompanyB();
       drawDesktop();
+      drawUserAgent();
+      drawPhone();
       scene.appendChild(el("g", { id: "sf-packets" }));
     }
 
-    function drawConnectionLines() {
-      const g = el("g", { id: "sf-lines", opacity: 0.4 });
-      const stroke = "rgba(103,232,249,0.4)";
-      const dash = "3 6";
-      g.appendChild(el("path", { d:`M ${ANCHOR.phone.x} ${ANCHOR.phone.y} C 380 380,420 320,${ANCHOR.byoLeft.x} ${ANCHOR.byoLeft.y}`, stroke, "stroke-width":1.2, fill:"none", "stroke-dasharray":dash }));
-      g.appendChild(el("path", { d:`M ${ANCHOR.byoRight.x} ${ANCHOR.byoRight.y} C 850 320,870 380,${ANCHOR.desktop.x} ${ANCHOR.desktop.y}`, stroke, "stroke-width":1.2, fill:"none", "stroke-dasharray":dash }));
-      g.appendChild(el("path", { d:`M ${ANCHOR.byoBottom.x} ${ANCHOR.byoBottom.y} L ${ANCHOR.vaultTop.x} ${ANCHOR.vaultTop.y}`, stroke, "stroke-width":1.2, fill:"none", "stroke-dasharray":dash }));
-      g.appendChild(el("path", { d:`M ${ANCHOR.phone.x} ${ANCHOR.phone.y+60} C 360 600,440 640,${ANCHOR.vaultTop.x-60} ${ANCHOR.vaultTop.y}`, stroke:"rgba(103,232,249,0.25)", "stroke-width":1, fill:"none", "stroke-dasharray":"2 7" }));
+    function drawFlowGuide() {
+      const g = el("g", { id: "sf-guide" });
+      const { byosync, enclave, vault } = DEVICES;
+      const byoB = byosync.cy + byosync.h / 2;
+      const encT = enclave.cy - enclave.h / 2;
+      const encB = enclave.cy + enclave.h / 2;
+      const vltT = vault.cy - vault.h / 2;
+      const gapX = 518;
+
+      g.appendChild(t(600, 22, "READ DOWN: DB (relay)  →  Nitro enclave  →  User vault", {
+        anchor: "middle", family: "JetBrains Mono,monospace", size: 8.5,
+        fill: "rgba(148,163,184,0.65)", tracking: "0.06em",
+      }));
+
+      const gaps: { y: number; label: string; sub: string; color: string }[] = [
+        { y: (byoB + encT) / 2, label: "③ vsock", sub: "ciphertext in", color: "#f472b6" },
+        { y: (encB + vltT) / 2, label: "⑤ vault", sub: "PII blob", color: "#34d399" },
+      ];
+      gaps.forEach(gap => {
+        g.appendChild(el("rect", {
+          x: gapX - 4, y: gap.y - 18, width: 88, height: 36, rx: 6,
+          fill: "rgba(2,6,23,0.85)", stroke: "rgba(255,255,255,0.08)", "stroke-width": 1,
+        }));
+        g.appendChild(t(gapX + 40, gap.y - 4, gap.label, {
+          anchor: "middle", family: "JetBrains Mono,monospace", size: 9, weight: 700, fill: gap.color,
+        }));
+        g.appendChild(t(gapX + 40, gap.y + 10, gap.sub, {
+          anchor: "middle", family: "Open Sans,sans-serif", size: 7.5, fill: "rgba(226,232,240,0.6)",
+        }));
+      });
+
+      g.appendChild(el("rect", {
+        x: 18, y: 668, width: 318, height: 98, rx: 8,
+        fill: "rgba(2,6,23,0.92)", stroke: "rgba(34,211,238,0.2)", "stroke-width": 1,
+      }));
+      g.appendChild(t(32, 686, "LINE COLORS (flowing packets)", {
+        family: "JetBrains Mono,monospace", size: 8, weight: 700, fill: "rgba(34,211,238,0.75)", tracking: "0.1em",
+      }));
+      const leg = [
+        { c: "#22d3ee", t: "Cyan — phone / TLS hybrid encrypt" },
+        { c: "#f472b6", t: "Pink — vsock into Nitro enclave" },
+        { c: "#34d399", t: "Green — vault encrypt / decrypt" },
+        { c: "#fbbf24", t: "Amber — lineage A→B · payment intent" },
+        { c: "#a78bfa", t: "Purple — user agent → remote agent (A2A)", a2aOnly: true },
+      ];
+      leg.forEach((item, i) => {
+        if (item.a2aOnly) {
+          const a2aLeg = el("g", { id: "sf-guide-a2a" });
+          a2aLeg.appendChild(el("circle", { cx: 32, cy: 704 + i * 13, r: 3.5, fill: item.c }));
+          a2aLeg.appendChild(t(44, 706 + i * 13, item.t, { size: 8, fill: "rgba(226,232,240,0.8)" }));
+          g.appendChild(a2aLeg);
+          return;
+        }
+        g.appendChild(el("circle", { cx: 32, cy: 704 + i * 13, r: 3.5, fill: item.c }));
+        g.appendChild(t(44, 706 + i * 13, item.t, { size: 8, fill: "rgba(226,232,240,0.8)" }));
+      });
       scene.appendChild(g);
+    }
+
+    /* route registry: packet animation follows these paths (same geometry as visible lines) */
+    const ROUTE_LOOKUP: Record<string, string> = {};
+
+    function routeKey(from: string, to: string) {
+      return `${from}|${to}`;
+    }
+
+    function registerRoute(
+      parent: SVGElement,
+      id: string,
+      from: string,
+      to: string,
+      d: string,
+      attrs: Record<string, string | number>,
+    ) {
+      ROUTE_LOOKUP[routeKey(from, to)] = id;
+      parent.appendChild(el("path", {
+        id: `sf-route-${id}`,
+        class: "sf-route-line",
+        "data-route-from": from,
+        "data-route-to": to,
+        d,
+        fill: "none",
+        ...attrs,
+      }));
+    }
+
+    function drawConnectionLines() {
+      const g = el("g", { id: "sf-lines", opacity: 0.5 });
+      const gA2a = el("g", { id: "sf-lines-a2a" });
+      const stroke = "rgba(103,232,249,0.45)";
+      const dash = "3 6";
+      const vsock = "rgba(244,114,182,0.6)";
+      const vsockDash = "4 5";
+      const vaultStroke = "rgba(52,211,153,0.55)";
+      const lineageStroke = "rgba(251,191,36,0.5)";
+      const agentStroke = "rgba(167,139,250,0.5)";
+
+      registerRoute(gA2a, "phone-agent", "phone", "agent",
+        `M ${ANCHOR.phone.x} ${ANCHOR.phone.y - 60} C 300 340,340 290,${ANCHOR.agent.x} ${ANCHOR.agent.y}`,
+        { stroke: agentStroke, "stroke-width": 1, "stroke-dasharray": "2 5" });
+      registerRoute(gA2a, "agent-byo", "agent", "byoLeft",
+        `M ${ANCHOR.agentRight.x} ${ANCHOR.agentRight.y} C 500 200,520 150,${ANCHOR.byoLeft.x} ${ANCHOR.byoLeft.y}`,
+        { stroke: agentStroke, "stroke-width": 1.1, "stroke-dasharray": dash });
+      registerRoute(gA2a, "agent-desktop", "agent", "desktop",
+        `M ${ANCHOR.agentRight.x} ${ANCHOR.agentRight.y} C 620 280,750 260,${ANCHOR.desktopLeft.x} ${ANCHOR.desktopLeft.y}`,
+        { stroke: agentStroke, "stroke-width": 1, "stroke-dasharray": "3 6", opacity: 0.65 });
+
+      registerRoute(g, "phone-byo", "phone", "byoLeft",
+        `M ${ANCHOR.phone.x} ${ANCHOR.phone.y} C 360 420,420 180,${ANCHOR.byoLeft.x} ${ANCHOR.byoLeft.y}`,
+        { stroke, "stroke-width": 1.2, "stroke-dasharray": dash });
+      registerRoute(g, "byo-enclave-down", "byoBottom", "enclaveTop",
+        `M ${ANCHOR.byoBottom.x} ${ANCHOR.byoBottom.y} L ${ANCHOR.enclaveTop.x} ${ANCHOR.enclaveTop.y}`,
+        { stroke: vsock, "stroke-width": 1.5, "stroke-dasharray": vsockDash });
+      registerRoute(g, "enclave-byo-up", "enclaveTop", "byoBottom",
+        `M ${ANCHOR.enclaveTop.x - 10} ${ANCHOR.enclaveTop.y} L ${ANCHOR.byoBottom.x - 10} ${ANCHOR.byoBottom.y}`,
+        { stroke: vsock, "stroke-width": 1.2, "stroke-dasharray": "2 6", opacity: 0.75 });
+      registerRoute(g, "enclave-vault-down", "enclaveBottom", "vaultTop",
+        `M ${ANCHOR.enclaveBottom.x} ${ANCHOR.enclaveBottom.y} L ${ANCHOR.vaultTop.x} ${ANCHOR.vaultTop.y}`,
+        { stroke: vaultStroke, "stroke-width": 1.4, "stroke-dasharray": vsockDash });
+      registerRoute(g, "vault-enclave-up", "vaultTop", "enclaveBottom",
+        `M ${ANCHOR.vaultTop.x + 10} ${ANCHOR.vaultTop.y} L ${ANCHOR.enclaveBottom.x + 10} ${ANCHOR.enclaveBottom.y}`,
+        { stroke: vaultStroke, "stroke-width": 1.1, "stroke-dasharray": "2 5", opacity: 0.7 });
+      registerRoute(g, "byo-desktop", "byoRight", "desktop",
+        `M ${ANCHOR.byoRight.x} ${ANCHOR.byoRight.y} C 820 180,860 240,${ANCHOR.desktop.x} ${ANCHOR.desktop.y}`,
+        { stroke, "stroke-width": 1.2, "stroke-dasharray": dash });
+      registerRoute(g, "enclave-desktop", "enclaveRight", "desktop",
+        `M ${ANCHOR.enclaveRight.x} ${ANCHOR.enclaveRight.y} C 780 380,820 300,${ANCHOR.desktop.x} ${ANCHOR.desktop.y}`,
+        { stroke: "rgba(52,211,153,0.4)", "stroke-width": 1, "stroke-dasharray": "3 5" });
+      registerRoute(g, "desktop-byo-lineage", "desktop", "byoRight",
+        `M ${ANCHOR.desktop.x} ${ANCHOR.desktop.y + 40} C 920 320,880 200,${ANCHOR.byoRight.x} ${ANCHOR.byoRight.y}`,
+        { stroke: lineageStroke, "stroke-width": 1.1, "stroke-dasharray": "4 4" });
+      registerRoute(g, "enclave-coB", "enclaveRight", "coB",
+        `M ${ANCHOR.enclaveRight.x} ${ANCHOR.enclaveRight.y} C 820 480,880 520,${ANCHOR.coBLeft.x} ${ANCHOR.coBLeft.y}`,
+        { stroke: lineageStroke, "stroke-width": 1.2, "stroke-dasharray": "4 4" });
+      registerRoute(g, "byo-coB", "byoRight", "coB",
+        `M ${ANCHOR.byoRight.x} ${ANCHOR.byoRight.y} C 860 360,900 460,${ANCHOR.coBLeft.x} ${ANCHOR.coBLeft.y}`,
+        { stroke: lineageStroke, "stroke-width": 1, "stroke-dasharray": "4 4", opacity: 0.55 });
+      registerRoute(g, "phone-vault", "phone", "vaultTop",
+        `M ${ANCHOR.phone.x} ${ANCHOR.phone.y + 80} C 280 620,400 660,${ANCHOR.vaultTop.x - 80} ${ANCHOR.vaultTop.y}`,
+        { stroke: "rgba(103,232,249,0.35)", "stroke-width": 1.2, "stroke-dasharray": "2 8" });
+
+      scene.appendChild(g);
+      scene.appendChild(gA2a);
     }
 
     function drawByoSyncCloud() {
@@ -508,7 +981,6 @@ export const SystemFlowDemo = () => {
       const { cx, cy, w, h } = DEVICES.byosync;
       const x = cx - w/2, y = cy - h/2;
 
-      /* smooth 3-bump cloud path (cubic beziers) */
       const cp = `M ${x+22} ${y+h} L ${x+w-22} ${y+h}
         Q ${x+w} ${y+h} ${x+w} ${y+h-22}
         L ${x+w} ${y+82}
@@ -521,69 +993,148 @@ export const SystemFlowDemo = () => {
         L ${x} ${y+h-22}
         Q ${x} ${y+h} ${x+22} ${y+h} Z`;
 
-      /* ambient glow behind the cloud */
-      g.appendChild(el("path", { d:cp, fill:"rgba(100,60,220,0.28)", transform:"translate(0,8)",
+      g.appendChild(el("path", { d:cp, fill:"rgba(100,60,220,0.22)", transform:"translate(0,8)",
         filter:"url(#sf-glow-strong)" }));
-      /* main cloud fill */
       g.appendChild(el("path", { d:cp, fill:"url(#sf-cloudGrad)",
-        stroke:"rgba(139,92,246,0.75)", "stroke-width":1.8, class:"sf-frame" }));
-      /* inner dot-grid texture */
-      const gridG = el("g", { opacity:0.06 });
-      for (let gx=x+20; gx<x+w-10; gx+=16)
-        for (let gy=y+88; gy<y+h-8; gy+=16)
-          gridG.appendChild(el("circle",{cx:gx,cy:gy,r:1,fill:"#60a5fa"}));
-      g.appendChild(gridG);
-      /* top accent line */
-      g.appendChild(el("rect", { x:x+50, y:y+82, width:w-100, height:2, rx:1,
-        fill:"url(#sf-cloudTopAccent)" }));
+        stroke:"rgba(96,165,250,0.5)", "stroke-width":1.6, "stroke-dasharray":"6 4", class:"sf-frame" }));
 
-      /* ── header section ── */
-      g.appendChild(el("rect", { x:x+14, y:y+90, width:w-28, height:30, rx:7,
+      g.appendChild(el("rect", { x:x+14, y:y+52, width:w-28, height:26, rx:7,
         fill:"url(#sf-cloudHeaderGrad)" }));
-      /* "ByoSync" mark + "control plane" label */
-      g.appendChild(t(x+32, y+107, "⬡", { family:"Open Sans,sans-serif", size:13,
-        weight:700, fill:"#60a5fa" }));
-      g.appendChild(t(x+50, y+107, "BYOSYNC", { family:"JetBrains Mono,monospace",
-        size:11, weight:700, fill:"#c4b5fd", tracking:"0.22em" }));
-      g.appendChild(t(x+w-18, y+107, "CONTROL PLANE", { anchor:"end",
-        family:"JetBrains Mono,monospace", size:9, weight:600, fill:"rgba(196,181,253,0.55)",
-        tracking:"0.18em" }));
-      /* live indicator */
-      g.appendChild(el("circle", { cx:x+w-30, cy:y+108, r:4, fill:"#34d399",
-        class:"sf-pulse-ring" }));
-      g.appendChild(el("circle", { cx:x+w-30, cy:y+108, r:4, fill:"#34d399" }));
-      /* thin separator */
-      g.appendChild(el("rect", { x:x+14, y:y+122, width:w-28, height:1,
-        fill:"rgba(139,92,246,0.2)" }));
+      g.appendChild(t(x+28, y+68, "BYOSYNC DB · PARENT RELAY", { family:"JetBrains Mono,monospace",
+        size:9.5, weight:700, fill:"#93c5fd", tracking:"0.14em" }));
+      g.appendChild(t(x+w-18, y+68, "untrusted", { anchor:"end", family:"Open Sans,sans-serif",
+        size:9, weight:600, fill:"rgba(148,163,184,0.7)" }));
+      g.appendChild(t(cx, y+82, "Lineage ledger · never plaintext", {
+        anchor:"middle", family:"Open Sans,sans-serif", size:7.5, fill:"rgba(186,230,253,0.55)",
+      }));
 
-      /* ── service tiles (8 items, 2 columns) ── */
-      const services = [
-        { name:"Identity Registry", color:"#60a5fa" },
-        { name:"Consent Ledger",    color:"#3b82f6" },
-        { name:"Token / Assertion", color:"#67e8f9" },
-        { name:"Vault Pointer Reg", color:"#22d3ee" },
-        { name:"Policy Engine",     color:"#34d399" },
-        { name:"Audit Log (WORM)",  color:"#fb923c" },
-        { name:"KMS / HSM",         color:"#f472b6" },
-        { name:"Biometric Helpers", color:"#c084fc" },
+      const dbTiles = [
+        { name:"Lineage ledger", color:"#fbbf24" },
+        { name:"Hash-chain audit", color:"#fb923c" },
+        { name:"Consent + tokens", color:"#3b82f6" },
+        { name:"Google proxy", color:"#22d3ee" },
       ];
-      const tileW = (w-38)/2, tileH = 26;
-      const tileX0 = x+14, tileY0 = y+130;
-      services.forEach((s, i) => {
-        const col = i%2, row = Math.floor(i/2);
-        const tx = tileX0 + col*(tileW+6), ty = tileY0 + row*(tileH+5);
-        /* tile bg */
-        g.appendChild(el("rect", { x:tx, y:ty, width:tileW, height:tileH, rx:6,
-          fill:"rgba(255,255,255,0.03)", stroke:`${s.color}44`, "stroke-width":1 }));
-        /* left accent strip */
-        g.appendChild(el("rect", { x:tx, y:ty+4, width:3, height:tileH-8, rx:1.5,
-          fill:s.color, opacity:0.85 }));
-        /* dot */
-        g.appendChild(el("circle", { cx:tx+14, cy:ty+13, r:3.5, fill:s.color, opacity:0.9 }));
-        /* label */
-        g.appendChild(t(tx+25, ty+17, s.name, { family:"Open Sans,sans-serif",
-          size:10.5, weight:600, fill:"#d8b4fe" }));
+      const pTileW = (w - 40) / 2;
+      const pTileH = 22;
+      const tilesY = y + 96;
+      const tileGap = 6;
+      dbTiles.forEach((s, i) => {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const tx = x + 16 + col * (pTileW + 8);
+        const ty = tilesY + row * (pTileH + tileGap);
+        g.appendChild(el("rect", { x:tx, y:ty, width:pTileW, height:pTileH, rx:5,
+          fill:"rgba(255,255,255,0.02)", stroke:`${s.color}33`, "stroke-width":1 }));
+        g.appendChild(t(tx + 8, ty + 14, s.name, { family:"Open Sans,sans-serif",
+          size:9, weight:600, fill:"#cbd5e1" }));
       });
+
+      const relayY = tilesY + 2 * (pTileH + tileGap) + 10;
+      g.appendChild(t(cx, relayY, "relay only — decrypt happens below ↓", {
+        anchor:"middle", family:"Open Sans,sans-serif", size:8.5, fill:"rgba(186,230,253,0.55)",
+      }));
+      scene.appendChild(g);
+    }
+
+    function drawEnclave() {
+      const g = el("g", { id:"sf-node-enclave", class:"sf-device" });
+      const { cx, cy, w, h } = DEVICES.enclave;
+      const x = cx - w/2, y = cy - h/2;
+
+      g.appendChild(el("rect", {
+        x:x - 6, y:y - 6, width:w + 12, height:h + 12, rx:16,
+        fill:"rgba(244,114,182,0.14)", filter:"url(#sf-glow-soft)",
+      }));
+      g.appendChild(el("rect", {
+        x, y, width:w, height:h, rx:14,
+        fill:"url(#sf-enclaveGrad)",
+        stroke:"#f472b6", "stroke-width":2.4, class:"sf-frame",
+      }));
+      g.appendChild(el("rect", {
+        x:x + 12, y:y + 10, width:w - 24, height:22, rx:6,
+        fill:"rgba(244,114,182,0.18)", stroke:"rgba(244,114,182,0.4)", "stroke-width":1,
+      }));
+      g.appendChild(t(cx, y + 26, "NITRO ENCLAVE", {
+        anchor:"middle", family:"JetBrains Mono,monospace",
+        size:11, weight:700, fill:"#fbcfe8", tracking:"0.18em",
+      }));
+      g.appendChild(t(cx, y + 38, "Only place plaintext exists · wiped on exit", {
+        anchor:"middle", family:"Open Sans,sans-serif", size:7.5, fill:"rgba(251,207,232,0.75)",
+      }));
+
+      const ops = [
+        { name:"hybridDecrypt", color:"#f472b6" },
+        { name:"BCH verify", color:"#c084fc" },
+        { name:"PII decrypt", color:"#ec4899" },
+        { name:"re-encrypt", color:"#34d399" },
+      ];
+      const tileW = (w - 32) / 2;
+      const tileH = 20;
+      ops.forEach((s, i) => {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const tx = x + 14 + col * (tileW + 4);
+        const ty = y + 46 + row * (tileH + 4);
+        g.appendChild(el("rect", { x:tx, y:ty, width:tileW, height:tileH, rx:5,
+          fill:"rgba(0,0,0,0.28)", stroke:`${s.color}55`, "stroke-width":1 }));
+        g.appendChild(t(tx + 6, ty + 13, s.name, { family:"JetBrains Mono,monospace",
+          size:8.5, weight:600, fill:"#fce7f3" }));
+      });
+
+      scene.appendChild(g);
+    }
+
+    function drawUserAgent() {
+      const g = el("g", { id:"sf-node-userAgent", class:"sf-device" });
+      const { cx, cy, w, h } = DEVICES.userAgent;
+      const x = cx - w/2, y = cy - h/2;
+      g.appendChild(el("rect", {
+        x:x-3, y:y-3, width:w+6, height:h+6, rx:12,
+        fill:"rgba(167,139,250,0.12)", filter:"url(#sf-glow-soft)",
+      }));
+      g.appendChild(el("rect", {
+        x, y, width:w, height:h, rx:10,
+        fill:"rgba(30,20,50,0.95)", stroke:"#a78bfa", "stroke-width":1.8, class:"sf-frame",
+      }));
+      g.appendChild(t(cx, y+22, "USER AGENT", {
+        anchor:"middle", family:"JetBrains Mono,monospace", size:9, weight:700, fill:"#ddd6fe", tracking:"0.14em",
+      }));
+      g.appendChild(t(cx, y+36, "A2A client · mandate + KYA", {
+        anchor:"middle", family:"Open Sans,sans-serif", size:7.5, fill:"rgba(196,181,253,0.75)",
+      }));
+      ([
+        { label:"VERIFY", sub:"boolean only", fill:"rgba(34,211,238,0.15)", stroke:"#22d3ee", tc:"#67e8f9" },
+        { label:"OPERATE-STD", sub:"scoped share", fill:"rgba(167,139,250,0.15)", stroke:"#a78bfa", tc:"#ddd6fe" },
+        { label:"SENSITIVE", sub:"refuse ext.", fill:"rgba(248,113,113,0.12)", stroke:"#f87171", tc:"#fca5a5" },
+      ] as { label:string; sub:string; fill:string; stroke:string; tc:string }[]).forEach((tier, i) => {
+        const ty = y + 50 + i * 14;
+        g.appendChild(el("rect", { x:x+8, y:ty-10, width:w-16, height:12, rx:3,
+          fill:tier.fill, stroke:tier.stroke, "stroke-width":0.8 }));
+        g.appendChild(t(x+14, ty, tier.label, { family:"JetBrains Mono,monospace", size:6.5, weight:700, fill:tier.tc }));
+        g.appendChild(t(x+w-10, ty, tier.sub, { anchor:"end", family:"Open Sans,sans-serif", size:6, fill:"rgba(148,163,184,0.7)" }));
+      });
+      scene.appendChild(g);
+    }
+
+    function drawCompanyB() {
+      const g = el("g", { id:"sf-node-companyB", class:"sf-device" });
+      const { cx, cy, w, h } = DEVICES.companyB;
+      const x = cx - w/2, y = cy - h/2;
+      g.appendChild(el("rect", {
+        x, y, width:w, height:h, rx:12,
+        fill:"rgba(15,23,42,0.95)", stroke:"rgba(148,163,184,0.55)", "stroke-width":1.6, class:"sf-frame",
+      }));
+      g.appendChild(el("rect", { x:x+12, y:y+10, width:w-24, height:20, rx:5,
+        fill:"rgba(251,191,36,0.1)", stroke:"rgba(251,191,36,0.35)", "stroke-width":1 }));
+      g.appendChild(t(cx, y+24, "COMPANY B · Delhivery", {
+        anchor:"middle", family:"JetBrains Mono,monospace", size:9, weight:700, fill:"#fcd34d", tracking:"0.1em",
+      }));
+      g.appendChild(t(cx, y+42, "transferee · decrypts own cipher", {
+        anchor:"middle", family:"Open Sans,sans-serif", size:8, fill:"rgba(203,213,225,0.7)",
+      }));
+      g.appendChild(t(cx, y+58, "Receives cipher from enclave", {
+        anchor:"middle", family:"Open Sans,sans-serif", size:8, fill:"rgba(251,191,36,0.75)",
+      }));
       scene.appendChild(g);
     }
 
@@ -633,7 +1184,7 @@ export const SystemFlowDemo = () => {
       /* title + subtitle */
       g.appendChild(t(rx2, y+26, "USER VAULT", { family:"JetBrains Mono,monospace",
         size:12.5, weight:700, fill:"#67e8f9", tracking:"0.22em" }));
-      g.appendChild(t(rx2, y+42, "AES-256-GCM · per-field DEK · UMK envelope", {
+      g.appendChild(t(rx2, y+42, "AES-256-GCM · per-user DEK · enclave-bound", {
         family:"Open Sans,sans-serif", size:10, fill:"rgba(165,243,252,0.65)" }));
       /* thin separator */
       g.appendChild(el("rect", { x:x+62, y:y+52, width:w-74, height:1, rx:0.5,
@@ -753,6 +1304,44 @@ export const SystemFlowDemo = () => {
         const btnY = y+(isPayment?330:310);
         c.appendChild(el("rect", { x:screenX+12, y:btnY, width:screenW-24, height:44, rx:22, fill:titleColor }));
         c.appendChild(t(cx, btnY+27, isPayment?"Pay with face + voice":"Approve with face + voice", { anchor:"middle", family:"Open Sans,sans-serif", size:12.5, weight:700, fill:"#0f172a" }));
+      } else if (state === "mandate-a2a") {
+        c.appendChild(t(cx, y+128, "Authorize agent", { anchor:"middle", family:"Open Sans,sans-serif", size:17, weight:700, fill:"#a78bfa" }));
+        c.appendChild(el("rect", { x:screenX+12, y:y+150, width:screenW-24, height:118, rx:10, fill:"rgba(167,139,250,0.08)", stroke:"rgba(167,139,250,0.35)", "stroke-width":1 }));
+        c.appendChild(t(screenX+22, y+172, "GOAL", { family:"JetBrains Mono,monospace", size:8.5, weight:700, fill:"#94a3b8", tracking:"0.2em" }));
+        c.appendChild(t(screenX+22, y+188, "Astrology + buy gemstone + pay", { family:"Open Sans,sans-serif", size:11, weight:600, fill:"#f1f5f9" }));
+        c.appendChild(t(screenX+22, y+212, "SCOPE · TTL", { family:"JetBrains Mono,monospace", size:8.5, weight:700, fill:"#94a3b8", tracking:"0.2em" }));
+        c.appendChild(t(screenX+22, y+228, "3 remote agents · 1 hour", { family:"Open Sans,sans-serif", size:11, fill:"#cbd5e1" }));
+        c.appendChild(t(screenX+22, y+248, "Session mandate (not blanket)", { family:"Open Sans,sans-serif", size:10, fill:"#94a3b8" }));
+        c.appendChild(el("rect", { x:screenX+12, y:y+290, width:screenW-24, height:44, rx:22, fill:"#a78bfa" }));
+        c.appendChild(t(cx, y+317, "Approve with face + voice", { anchor:"middle", family:"Open Sans,sans-serif", size:12.5, weight:700, fill:"#0f172a" }));
+      } else if (state === "consent-a2a-shopping") {
+        c.appendChild(t(cx, y+118, "One consent · 3 classes", { anchor:"middle", family:"Open Sans,sans-serif", size:16, weight:700, fill:"#a78bfa" }));
+        c.appendChild(el("rect", { x:screenX+12, y:y+138, width:screenW-24, height:168, rx:10, fill:"rgba(255,255,255,0.04)", stroke:"rgba(100,116,139,0.3)", "stroke-width":1 }));
+        c.appendChild(t(screenX+22, y+158, "ShopCo · shopping agent", { family:"Open Sans,sans-serif", size:12, weight:700, fill:"#f1f5f9" }));
+        ([
+          ["VERIFY","Age 18+ (boolean only — no DOB)", "#22d3ee"],
+          ["OPERATE-STD","Delivery address · delivery+7d TTL", "#a78bfa"],
+          ["INTENT","Pay ₹499 · no card/bank on wire", "#fbbf24"],
+        ] as string[][]).forEach(([tier, line, col], i) => {
+          const ry = y + 182 + i * 38;
+          c.appendChild(t(screenX+22, ry, tier, { family:"JetBrains Mono,monospace", size:8, weight:700, fill:col, tracking:"0.12em" }));
+          c.appendChild(t(screenX+22, ry+14, line, { family:"Open Sans,sans-serif", size:9.5, fill:"#cbd5e1" }));
+        });
+        c.appendChild(el("rect", { x:screenX+12, y:y+322, width:screenW-24, height:44, rx:22, fill:"#a78bfa" }));
+        c.appendChild(t(cx, y+349, "Approve once (3 tokens minted)", { anchor:"middle", family:"Open Sans,sans-serif", size:11.5, weight:700, fill:"#0f172a" }));
+      } else if (state === "dashboard-a2a") {
+        c.appendChild(t(cx, y+120, "A2A lineage", { anchor:"middle", family:"Open Sans,sans-serif", size:17, weight:700, fill:"#f1f5f9" }));
+        ([
+          { agent:"AstroCorp", what:"Birth · astrology", exp:"deleted 14:30", c:"#a78bfa" },
+          { agent:"ShopCo", what:"Address · delivery", exp:"deletes 28 May", c:"#34d399" },
+          { agent:"MerchantM", what:"₹499 intent", exp:"instrument never shared", c:"#fbbf24" },
+        ] as { agent:string; what:string; exp:string; c:string }[]).forEach((row, i) => {
+          const ry = y + 155 + i * 58;
+          c.appendChild(el("rect", { x:screenX+12, y:ry, width:screenW-24, height:50, rx:8, fill:"rgba(255,255,255,0.03)", stroke:"rgba(100,116,139,0.25)", "stroke-width":1 }));
+          c.appendChild(t(screenX+22, ry+18, row.agent, { family:"Open Sans,sans-serif", size:12, weight:700, fill:row.c }));
+          c.appendChild(t(screenX+22, ry+34, row.what, { family:"Open Sans,sans-serif", size:10, fill:"#94a3b8" }));
+          c.appendChild(t(screenX+screenW-22, ry+34, row.exp, { anchor:"end", family:"JetBrains Mono,monospace", size:8, fill:"#cbd5e1" }));
+        });
       } else if (state === "approved") {
         c.appendChild(el("circle", { cx, cy:y+230, r:50, fill:"none", stroke:"#34d399", "stroke-width":3 }));
         c.appendChild(t(cx, y+246, "✓", { anchor:"middle", family:"Open Sans,sans-serif", size:56, weight:300, fill:"#34d399" }));
@@ -888,26 +1477,30 @@ export const SystemFlowDemo = () => {
           family:"Open Sans,sans-serif", size:11.5, weight:700, fill:"#0f172a" }));
 
       } else if (state === "enroll-complete") {
-        c.appendChild(el("circle", { cx, cy:y+190, r:46, fill:"none",
+        c.appendChild(el("circle", { cx, cy:y+178, r:40, fill:"none",
           stroke:"#22d3ee", "stroke-width":3 }));
-        c.appendChild(el("circle", { cx, cy:y+190, r:46, fill:"rgba(34,211,238,0.06)" }));
-        c.appendChild(t(cx, y+205, "✓", { anchor:"middle", family:"Open Sans,sans-serif",
-          size:50, weight:300, fill:"#22d3ee" }));
-        c.appendChild(t(cx, y+268, "Vault ready", { anchor:"middle",
-          family:"Open Sans,sans-serif", size:18, weight:800, fill:"#f1f5f9" }));
-        c.appendChild(t(cx, y+290, "usr_8a2f · 4 fields enrolled", { anchor:"middle",
-          family:"JetBrains Mono,monospace", size:10, fill:"#22d3ee", tracking:"0.1em" }));
+        c.appendChild(el("circle", { cx, cy:y+178, r:40, fill:"rgba(34,211,238,0.06)" }));
+        c.appendChild(t(cx, y+192, "✓", { anchor:"middle", family:"Open Sans,sans-serif",
+          size:44, weight:300, fill:"#22d3ee" }));
+        c.appendChild(t(cx, y+248, "Vault ready", { anchor:"middle",
+          family:"Open Sans,sans-serif", size:17, weight:800, fill:"#f1f5f9" }));
+        c.appendChild(t(cx, y+268, "usr_8a2f · 4 fields enrolled", { anchor:"middle",
+          family:"JetBrains Mono,monospace", size:9.5, fill:"#22d3ee", tracking:"0.1em" }));
         const pills = ["age_over_18","kyc_verified","address_proof","date_of_birth"];
+        const gridTop = y + 288;
         pills.forEach((p, i) => {
-          const col = i%2, row = Math.floor(i/2);
-          const px = cx - 90 + col * 96, py = y + 314 + row * 28;
-          c.appendChild(el("rect", { x:px-4, y:py-14, width:p.length*6+12, height:20, rx:10,
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          const pillW = p.length * 6 + 14;
+          const pillLeft = cx - 95 + col * 98;
+          const boxY = gridTop + row * 30;
+          c.appendChild(el("rect", { x: pillLeft, y: boxY, width: pillW, height: 22, rx: 10,
             fill:"rgba(34,211,238,0.12)", stroke:"rgba(34,211,238,0.4)", "stroke-width":1 }));
-          c.appendChild(t(px, py, p, { family:"JetBrains Mono,monospace",
-            size:9, weight:600, fill:"#67e8f9" }));
+          c.appendChild(t(pillLeft + pillW / 2, boxY + 15, p, { anchor:"middle",
+            family:"JetBrains Mono,monospace", size:8.5, weight:600, fill:"#67e8f9" }));
         });
-        c.appendChild(t(cx, y+385, "You own the key. ByoSync holds only a pointer.", { anchor:"middle",
-          family:"Open Sans,sans-serif", size:10, fill:"#cbd5e1" }));
+        c.appendChild(t(cx, y + 368, "You own the key. ByoSync holds only a pointer.", { anchor:"middle",
+          family:"Open Sans,sans-serif", size:9.5, fill:"#cbd5e1" }));
       }
     }
 
@@ -925,10 +1518,15 @@ export const SystemFlowDemo = () => {
       (["#f87171","#fbbf24","#34d399"] as string[]).forEach((col, i) => {
         g.appendChild(el("circle", { cx:sX+14+i*14, cy:sY+13, r:4, fill:col }));
       });
-      g.appendChild(t(sX+sW/2, sY+17, "AcmePay · Workspace", { anchor:"middle", family:"Open Sans,sans-serif", size:10, weight:600, fill:"#94a3b8" }));
+      g.appendChild(t(sX+sW/2, sY+17, "COMPANY A · AcmePay", { id:"sf-desktop-title", anchor:"middle", family:"Open Sans,sans-serif", size:10, weight:600, fill:"#94a3b8" }));
       g.appendChild(el("g", { id:"sf-desktop-content" }));
       scene.appendChild(g);
       renderDesktopIdle();
+    }
+
+    function setDesktopChrome(title: string) {
+      const titleEl = scene.querySelector<SVGTextElement>("#sf-desktop-title");
+      if (titleEl) titleEl.textContent = title;
     }
 
     function clearDesktopContent() {
@@ -1042,73 +1640,220 @@ export const SystemFlowDemo = () => {
             fill: i === 3 ? "#34d399" : "#cbd5e1" }));
         });
       } else if (state === "enroll-registered") {
-        c.appendChild(t(cx, sY+54, "User registered", { anchor:"middle", family:"Open Sans,sans-serif",
-          size:17, weight:700, fill:"#34d399" }));
-        c.appendChild(el("rect", { x:sX+26, y:sY+78, width:sW-52, height:130, rx:6,
+        c.appendChild(t(cx, sY+48, "User registered", { anchor:"middle", family:"Open Sans,sans-serif",
+          size:16, weight:700, fill:"#34d399" }));
+        const boxY = sY + 68;
+        const boxH = 88;
+        c.appendChild(el("rect", { x:sX+26, y:boxY, width:sW-52, height:boxH, rx:6,
           fill:"rgba(52,211,153,0.05)", stroke:"rgba(52,211,153,0.2)", "stroke-width":1 }));
-        ([["user_token","usr_8a2f"],["device_key_fp","3e:9c:f1:…"],["created_at","2024-03-15 14:31 IST"],["vault_ptr","enc_ptr → GDrive"],["fields_enrolled","4"]] as string[][]).forEach(([k,v],i) => {
-          const py = sY+102+i*20;
-          c.appendChild(t(sX+44, py, k, { family:"JetBrains Mono,monospace", size:10.5, fill:"#94a3b8" }));
-          c.appendChild(t(sX+sW-44, py, v, { anchor:"end", family:"JetBrains Mono,monospace",
-            size:10.5, weight:700, fill:"#34d399" }));
+        ([["user_token","usr_8a2f"],["device_key_fp","3e:9c:f1:…"],["created_at","2024-03-15 14:31"],["vault_ptr","enc_ptr → GDrive"],["fields_enrolled","4"]] as string[][]).forEach(([k,v],i) => {
+          const py = boxY + 16 + i * 16;
+          c.appendChild(t(sX+40, py, k, { family:"JetBrains Mono,monospace", size:9, fill:"#94a3b8" }));
+          c.appendChild(t(sX+sW-40, py, v, { anchor:"end", family:"JetBrains Mono,monospace",
+            size:9, weight:700, fill:"#34d399" }));
         });
-        c.appendChild(t(cx, sY+sH-18, "No name · no email · no PII stored here", {
-          anchor:"middle", family:"Open Sans,sans-serif", size:9.5, fill:"#cbd5e1" }));
+        c.appendChild(t(cx, sY + sH - 22, "No name · no email · no PII stored here", {
+          anchor:"middle", family:"Open Sans,sans-serif", size:9, fill:"#cbd5e1" }));
+
+      /* ── A2A remote-agent desktop states ── */
+      } else if (state === "a2a-agent-card") {
+        c.appendChild(t(cx, sY+54, "Agent Card verified", { anchor:"middle", family:"Open Sans,sans-serif", size:17, weight:700, fill:"#a78bfa" }));
+        c.appendChild(el("rect", { x:sX+26, y:sY+78, width:sW-52, height:138, rx:6, fill:"rgba(167,139,250,0.06)", stroke:"rgba(167,139,250,0.3)", "stroke-width":1 }));
+        ([
+          ["A2A sig","v1.0 valid"],
+          ["KYA principal","did:byosync:shopco"],
+          ["dataClasses","VERIFY, OPERATE-STD"],
+          ["revocation","ACTIVE"],
+          ["scopes","age, address, order"],
+        ] as string[][]).forEach(([k,v],i) => {
+          const py = sY+102+i*22;
+          c.appendChild(t(sX+44, py, k, { family:"JetBrains Mono,monospace", size:10, fill:"#94a3b8" }));
+          c.appendChild(t(sX+sW-44, py, v, { anchor:"end", family:"JetBrains Mono,monospace", size:10, weight:700, fill:"#ddd6fe" }));
+        });
+        c.appendChild(t(cx, sY+sH-18, "OPERATE-SENSITIVE not permitted", { anchor:"middle", family:"Open Sans,sans-serif", size:9.5, fill:"#f87171" }));
+      } else if (state === "a2a-task") {
+        c.appendChild(t(cx, sY+58, "A2A task received", { anchor:"middle", family:"Open Sans,sans-serif", size:17, weight:700, fill:"#38bdf8" }));
+        c.appendChild(el("rect", { x:sX+26, y:sY+82, width:sW-52, height:120, rx:6, fill:"rgba(56,189,248,0.05)", stroke:"rgba(56,189,248,0.25)", "stroke-width":1 }));
+        c.appendChild(t(sX+44, sY+108, "parts: tokenized refs only", { family:"JetBrains Mono,monospace", size:10, fill:"#a5f3fc" }));
+        c.appendChild(t(sX+44, sY+130, "metadata.byosyncConsentToken", { family:"JetBrains Mono,monospace", size:10, fill:"#a5f3fc" }));
+        c.appendChild(t(sX+44, sY+158, "NO raw PII in message body", { family:"JetBrains Mono,monospace", size:10, weight:700, fill:"#34d399", tracking:"0.08em" }));
+        c.appendChild(t(cx, sY+sH-18, "Redeem tokens at ByoSync runtime", { anchor:"middle", family:"Open Sans,sans-serif", size:9.5, fill:"#94a3b8" }));
+      } else if (state === "a2a-boolean") {
+        c.appendChild(t(cx, sY+60, "Verify-token redeemed", { anchor:"middle", family:"Open Sans,sans-serif", size:16, weight:700, fill:"#34d399" }));
+        c.appendChild(el("rect", { x:sX+40, y:sY+92, width:sW-80, height:70, rx:6, fill:"rgba(52,211,153,0.08)", stroke:"rgba(52,211,153,0.35)", "stroke-width":1 }));
+        c.appendChild(t(cx, sY+132, "age18plus: true", { anchor:"middle", family:"JetBrains Mono,monospace", size:14, weight:700, fill:"#34d399" }));
+        c.appendChild(t(cx, sY+158, "DOB never left vault", { anchor:"middle", family:"Open Sans,sans-serif", size:10, fill:"#94a3b8" }));
+      } else if (state === "a2a-artifact-order") {
+        c.appendChild(t(cx, sY+58, "Order artifact", { anchor:"middle", family:"Open Sans,sans-serif", size:18, weight:700, fill:"#34d399" }));
+        c.appendChild(el("rect", { x:sX+26, y:sY+84, width:sW-52, height:100, rx:6, fill:"rgba(52,211,153,0.05)", stroke:"rgba(52,211,153,0.3)", "stroke-width":1 }));
+        ([["orderId","ord_9f2a"],["eta","2–3 days"],["item","yellow sapphire"],["paid","₹499 intent"]] as string[][]).forEach(([k,v],i) => {
+          const py = sY+108+i*20;
+          c.appendChild(t(sX+44, py, k, { family:"JetBrains Mono,monospace", size:10.5, fill:"#94a3b8" }));
+          c.appendChild(t(sX+sW-44, py, v, { anchor:"end", family:"JetBrains Mono,monospace", size:10.5, weight:700, fill:"#34d399" }));
+        });
       }
     }
 
-    /* ── packet animation ── */
+    /* ── packet animation: travel existing diagram paths, light line in place ── */
+    const PACKET_SEG_MS = 1400;
+
+    function normRouteKey(key: string) {
+      if (key === "agent" || key === "agentRight" || key === "agentBottom") return "agent";
+      if (key === "coB" || key === "coBLeft") return "coB";
+      if (key === "desktop" || key === "desktopLeft") return "desktop";
+      return key;
+    }
+
+    function findRouteId(fromKey: string, toKey: string) {
+      const from = normRouteKey(fromKey);
+      const to = normRouteKey(toKey);
+      return ROUTE_LOOKUP[routeKey(from, to)] || ROUTE_LOOKUP[routeKey(to, from)] || null;
+    }
+
+    function isRouteReversed(fromKey: string, toKey: string) {
+      const from = normRouteKey(fromKey);
+      const to = normRouteKey(toKey);
+      return !ROUTE_LOOKUP[routeKey(from, to)] && !!ROUTE_LOOKUP[routeKey(to, from)];
+    }
+
     interface PacketOpts {
       fromKey: string; toKey: string; label: string;
       color?: string; waypoints?: {x:number;y:number}[];
       onArrive?: () => void; delay?: number;
     }
+
+    function animateOnRoutePath(
+      pathEl: SVGPathElement,
+      reverse: boolean,
+      color: string,
+      dot: SVGCircleElement,
+      halo: SVGCircleElement,
+      ring: SVGCircleElement,
+      lbl: SVGElement,
+      onDone: () => void,
+    ) {
+      const len = pathEl.getTotalLength();
+      const ms = Math.max(PACKET_SEG_MS, Math.round(len * 2.6));
+      const saved = {
+        stroke: pathEl.getAttribute("stroke"),
+        width: pathEl.getAttribute("stroke-width"),
+        opacity: pathEl.getAttribute("opacity"),
+        dash: pathEl.getAttribute("stroke-dasharray"),
+        offset: pathEl.getAttribute("stroke-dashoffset"),
+      };
+
+      pathEl.classList.add("sf-route-lit");
+      pathEl.setAttribute("stroke", color);
+      pathEl.setAttribute("stroke-width", String(parseFloat(saved.width || "1") + 2.2));
+      pathEl.setAttribute("stroke-dasharray", `${len}`);
+      pathEl.setAttribute("stroke-dashoffset", reverse ? "0" : String(len));
+
+      const startPt = pathEl.getPointAtLength(reverse ? len : 0);
+      dot.setAttribute("cx", String(startPt.x));
+      dot.setAttribute("cy", String(startPt.y));
+      halo.setAttribute("cx", String(startPt.x));
+      halo.setAttribute("cy", String(startPt.y));
+      ring.setAttribute("cx", String(startPt.x));
+      ring.setAttribute("cy", String(startPt.y));
+      lbl.setAttribute("transform", `translate(${startPt.x},${startPt.y - 24})`);
+
+      const t0 = performance.now();
+      function frame(now: number) {
+        const t = Math.min(1, (now - t0) / ms);
+        const eased = 1 - Math.pow(1 - t, 2.2);
+        const at = reverse ? (1 - eased) * len : eased * len;
+        const pt = pathEl.getPointAtLength(at);
+        dot.setAttribute("cx", String(pt.x));
+        dot.setAttribute("cy", String(pt.y));
+        halo.setAttribute("cx", String(pt.x));
+        halo.setAttribute("cy", String(pt.y));
+        ring.setAttribute("cx", String(pt.x));
+        ring.setAttribute("cy", String(pt.y));
+        lbl.setAttribute("transform", `translate(${pt.x},${pt.y - 24})`);
+        pathEl.setAttribute("stroke-dashoffset", reverse ? String(eased * len) : String(len - eased * len));
+
+        if (t < 1) requestAnimationFrame(frame);
+        else {
+          pathEl.classList.remove("sf-route-lit");
+          if (saved.stroke) pathEl.setAttribute("stroke", saved.stroke);
+          if (saved.width) pathEl.setAttribute("stroke-width", saved.width);
+          if (saved.opacity != null) pathEl.setAttribute("opacity", saved.opacity);
+          if (saved.dash) pathEl.setAttribute("stroke-dasharray", saved.dash);
+          else pathEl.removeAttribute("stroke-dasharray");
+          if (saved.offset) pathEl.setAttribute("stroke-dashoffset", saved.offset);
+          else pathEl.removeAttribute("stroke-dashoffset");
+          onDone();
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+
     function makePacket({ fromKey, toKey, label, color="#22d3ee", waypoints, onArrive, delay=0 }: PacketOpts) {
       setTimeout(() => {
         const start = ANCHOR[fromKey] || ANCHOR.phone;
-        const end   = ANCHOR[toKey]   || ANCHOR.phone;
-        const g = el("g", { opacity:0 });
-        const ring = el("circle", { cx:start.x, cy:start.y, r:5, fill:"none", stroke:color, "stroke-width":2, class:"sf-pulse-ring" });
-        const dot  = el("circle", { cx:start.x, cy:start.y, r:7, fill:color, filter:"url(#sf-glow)" });
-        const lbl = el("g", { transform:`translate(${start.x},${start.y-22})` });
-        const lblW = Math.max(60, label.length*6+16);
-        lbl.appendChild(el("rect", { x:-lblW/2, y:-12, width:lblW, height:18, rx:4, fill:"#0a1628", stroke:color, "stroke-width":1, opacity:0.96 }));
+        const routeId = findRouteId(fromKey, toKey);
+        const reverse = routeId ? isRouteReversed(fromKey, toKey) : false;
+
+        const g = el("g", { opacity: "0" });
+        const halo = el("circle", {
+          cx: start.x, cy: start.y, r: 12, fill: color, opacity: 0.3, filter: "url(#sf-flow-glow)",
+        }) as SVGCircleElement;
+        const ring = el("circle", {
+          cx: start.x, cy: start.y, r: 5, fill: "none", stroke: color, "stroke-width": 2, class: "sf-pulse-ring",
+        }) as SVGCircleElement;
+        const dot = el("circle", {
+          cx: start.x, cy: start.y, r: 7, fill: "#f8fafc", stroke: color, "stroke-width": 2.5, filter: "url(#sf-glow)",
+        }) as SVGCircleElement;
+        const lbl = el("g", { transform: `translate(${start.x},${start.y - 24})` }) as SVGGElement;
+        const lblW = Math.max(72, label.length * 6.5 + 20);
+        lbl.appendChild(el("rect", {
+          x: -lblW / 2, y: -12, width: lblW, height: 20, rx: 5,
+          fill: "#0a1628", stroke: color, "stroke-width": 1.2, opacity: 0.97,
+        }));
         const txt = document.createElementNS(SVG_NS, "text");
-        txt.setAttribute("x","0"); txt.setAttribute("y","1");
-        txt.setAttribute("text-anchor","middle");
-        txt.setAttribute("font-family","JetBrains Mono,monospace");
-        txt.setAttribute("font-size","9.5");
-        txt.setAttribute("font-weight","700");
-        txt.setAttribute("fill","#e2e8f0");
-        txt.setAttribute("letter-spacing","0.05em");
+        txt.setAttribute("x", "0"); txt.setAttribute("y", "2");
+        txt.setAttribute("text-anchor", "middle");
+        txt.setAttribute("font-family", "JetBrains Mono,monospace");
+        txt.setAttribute("font-size", "10");
+        txt.setAttribute("font-weight", "700");
+        txt.setAttribute("fill", "#e2e8f0");
         txt.textContent = label;
         lbl.appendChild(txt);
-        g.appendChild(ring); g.appendChild(dot); g.appendChild(lbl);
+        g.appendChild(halo);
+        g.appendChild(ring);
+        g.appendChild(dot);
+        g.appendChild(lbl);
+
         const packetLayer = scene.querySelector<SVGGElement>("#sf-packets");
         if (packetLayer) packetLayer.appendChild(g);
-        requestAnimationFrame(() => g.setAttribute("opacity","1"));
-        const path = waypoints || [end];
-        let idx = 0;
-        function next() {
-          if (idx >= path.length) {
-            setTimeout(() => {
-              g.setAttribute("opacity","0");
-              setTimeout(() => g.parentNode && g.parentNode.removeChild(g), 280);
-              onArrive && onArrive();
-            }, 100);
+        requestAnimationFrame(() => g.setAttribute("opacity", "1"));
+
+        const finish = () => {
+          setTimeout(() => {
+            g.setAttribute("opacity", "0");
+            setTimeout(() => g.parentNode?.removeChild(g), 320);
+            onArrive && onArrive();
+          }, 220);
+        };
+
+        if (routeId) {
+          const pathEl = scene.querySelector<SVGPathElement>(`#sf-route-${routeId}`);
+          if (pathEl) {
+            animateOnRoutePath(pathEl, reverse, color, dot, halo, ring, lbl, finish);
             return;
           }
-          const tgt = path[idx];
-          (dot.style as CSSStyleDeclaration).transition = "cx 0.55s cubic-bezier(0.4,0,0.2,1),cy 0.55s cubic-bezier(0.4,0,0.2,1)";
-          (ring.style as CSSStyleDeclaration).transition = "cx 0.55s cubic-bezier(0.4,0,0.2,1),cy 0.55s cubic-bezier(0.4,0,0.2,1)";
-          (lbl.style as CSSStyleDeclaration).transition = "transform 0.55s cubic-bezier(0.4,0,0.2,1)";
-          dot.setAttribute("cx", String(tgt.x)); dot.setAttribute("cy", String(tgt.y));
-          ring.setAttribute("cx", String(tgt.x)); ring.setAttribute("cy", String(tgt.y));
-          lbl.setAttribute("transform", `translate(${tgt.x},${tgt.y-22})`);
-          idx++;
-          setTimeout(next, 580);
         }
-        setTimeout(next, 80);
+
+        /* fallback: phone→vault arc when waypoints used for direct vault upload */
+        if (waypoints?.length && normRouteKey(fromKey) === "phone" && normRouteKey(toKey) === "vaultTop") {
+          const vaultPath = scene.querySelector<SVGPathElement>("#sf-route-phone-vault");
+          if (vaultPath) {
+            animateOnRoutePath(vaultPath, false, color, dot, halo, ring, lbl, finish);
+            return;
+          }
+        }
+
+        finish();
       }, delay);
     }
 
@@ -1127,18 +1872,11 @@ export const SystemFlowDemo = () => {
     const SCENARIOS: Record<string, Step[]> = {
 
       vault_inception: [
-        /* ─────────────────────────────────────────────────────────────────
-           CORRECTED DATA-FLOW ARCHITECTURE
-           ─────────────────────────────────────────────────────────────────
-           ByoSync DB receives  → auth primitives only
-                                  (helper_data, k2, device_pubkey,
-                                   user_token, encrypted vault pointer)
-           User's Vault receives → ALL actual personal data
-                                   (name, phone, email, DOB, address, KYC)
-                                   sent DIRECTLY from phone — ByoSync is
-                                   NOT in the personal-data path
-           Boolean assertions   → ByoSync DB (audit/consent ledger)
-                                   when consent flows are used later
+        /* ── v2 TARGET (BYOSYNC_FLOW_V2_ENCLAVE_TARGET.md) ───────────────
+           Parent EC2 = blind relay (ciphertext in, signed result out).
+           Nitro enclave = hybridDecrypt, BCH enroll, PII envelope, KMS wrap.
+           Mongo = phoneHash + KMS-wrapped templates + wrapped OAuth + pointers.
+           Drive = AES-GCM identity blob; DEK per-user, PCR-gated KMS.
         ──────────────────────────────────────────────────────────────────*/
 
         { label:"First launch — nothing stored yet",
@@ -1165,69 +1903,59 @@ export const SystemFlowDemo = () => {
             resp:{ tags:["soc2","pci"], text:"SOC 2 CC6.1 — hardware-backed key protection. PCI DSS 4.0.1 Req 3.6 — key management lifecycle. Random UMK means biometric compromise alone does not expose vault contents." } },
           action:(done)=>{ renderPhoneScene("enroll-keygen"); highlightDevice("phone",1800); setTimeout(done,1800); } },
 
-        { label:"Auth primitives → ByoSync DB · vault pointer registered",
-          narration:"The phone sends only the auth primitives to ByoSync: helper_data, k2-derivative, device public key. No name, no phone number, no email. ByoSync issues a pseudonymous user_token and registers an encrypted vault pointer.",
-          side:{ num:"04 / 09", title:"ByoSync DB receives auth primitives only",
-            desc:"<strong>This is the only time the phone talks to ByoSync during registration.</strong> ByoSync's Identity Registry stores: helper_data (public), device_pubkey, and an encrypted vault pointer. It <strong>never sees personal data.</strong>",
-            crypto:"// What goes to ByoSync DB\nPOST /v1/enroll  (TLS 1.3)\n{\n  device_pubkey:  '04:3e:9c:f1:…',\n  helper_data:    'h_8a2f…',   // safe: non-reversible\n  k2_commitment:  'kc_7fa3…',  // commitment, not k2 itself\n  vault_ptr_enc:  Encrypt(vault_url, KMS_key),\n  nonce:          'n_9ff2…',\n  attestation:    DeviceKey.sign(nonce)\n}\n← { user_token: 'usr_8a2f', status: 'enrolled' }\n\n// ByoSync stores: user_token, device_pubkey,\n//   helper_data, vault_ptr_enc\n// ByoSync does NOT store: name, phone, email, KYC",
-            resp:{ tags:["dpdp","soc2"], text:"DPDP Section 8(1) — data minimisation. ByoSync's Identity Registry holds zero PII. If breached: attacker gets user_token (random), helper_data (non-reversible), and an encrypted vault pointer — no personal data." } },
-          action:(done)=>{ makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Auth primitives",color:"#22d3ee",onArrive:()=>{ highlightDevice("byosync",1400); renderDesktopScene("enroll-registered"); setTimeout(()=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"Token issued",color:"#34d399",onArrive:()=>done() }); },400); } }); } },
+        { label:"Hybrid ciphertext → parent relay → Nitro enclave",
+          narration:"Registration payload (face embeddings + PII fields) is hybrid-encrypted on the phone. The parent server never decrypts — it forwards the blob over vsock into an attested Nitro enclave.",
+          side:{ num:"04 / 09", title:"Parent is blind · enclave decrypts",
+            desc:"<strong>v2 change:</strong> RSA private key lives in KMS, released only to the enclave (PCR-gated). The parent EC2 operator, a memory dump, or a compromised dependency on the relay tier cannot read embeddings or PII.",
+            crypto:"// Phone → Parent (TLS)\nPOST /v1/user/register\n{ encryptedData, encryptedAESKey, iv }\n\n// Parent → Enclave (vsock, unchanged ciphertext)\nvsock.send(enroll_op, body)\n\n// Inside Nitro enclave ONLY:\nplain := hybridDecrypt(body)\nphoneHash, emailHash := HMAC(plain.phone, plain.email)\ntemplates := BCH_register(plain.faceId)  // then KMS-wrap\n\n// Parent never sees: plain",
+            resp:{ tags:["dpdp","soc2"], text:"Trust boundary: attested enclave. Parent sees ciphertext in, signed result out — never plaintext biometric bits or PII." } },
+          action:(done)=>{ makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Hybrid cipher",color:"#22d3ee",onArrive:()=>{ highlightDevice("byosync",800); makePacket({ fromKey:"byoBottom",toKey:"enclaveTop",label:"vsock ↓ decrypt",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1400); renderDesktopScene("enroll-registered"); setTimeout(()=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"KMS wrap ↑",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",600); makePacket({ fromKey:"byoRight",toKey:"desktop",label:"Signed OK",color:"#34d399",onArrive:()=>done() }); } }); },400); } }); } }); } },
 
-        { label:"KYC data → encrypted on device → DIRECT to vault",
-          narration:"User enters their personal data: name, phone number, email, date of birth, address. Each field is encrypted with its own DEK, wrapped by the UMK — then sent DIRECTLY to their cloud vault. ByoSync is not in this data path.",
-          side:{ num:"05 / 09", title:"Personal data bypasses ByoSync entirely",
-            desc:"<strong>ByoSync is architecturally excluded from the personal data path.</strong> Encryption happens on-device using the UMK from the Secure Enclave. Ciphertext travels directly from phone to the user's cloud storage (Google Drive). ByoSync holds only the encrypted pointer — it cannot read the contents.",
-            crypto:"// Encryption on-device, sent DIRECT to vault\n// ByoSync is NOT in this path\n\nfor field in [name, phone, email, dob, address, kyc]:\n  DEK := SecureRandom.bytes(32)\n  ct  := AES_GCM_encrypt(field.value, DEK)\n  wDEK := AES_GCM_encrypt(DEK, UMK)\n\n  // Direct PUT to cloud vault URL\n  // (resolved from local vault_ptr — not via ByoSync API)\n  PUT vault_url + '/usr_8a2f/' + field.name\n      body: { ct, wDEK }\n\n  zero(field.value); zero(DEK)\n\n// ByoSync sees: vault_ptr_enc (opaque to it)\n// ByoSync does NOT see: any field value",
-            resp:{ tags:["dpdp","soc2","pci"], text:"DPDP Rule 6(1)(a) — encryption at rest. ByoSync's blast-radius is now strictly limited: a ByoSync DB breach reveals zero personal data. Per-field DEK means individual field compromise does not expose others." } },
-          action:(done)=>{ renderPhoneScene("enroll-kyc"); highlightDevice("phone",1400); setTimeout(()=>{
-            // Packet follows the existing dashed phone→vault connection line exactly:
-            // bezier M 320 440 C 360 600,440 640,580 562  sampled at t=0.25/0.50/0.75
+        { label:"Enclave builds PII envelope → parent uploads to Drive",
+          narration:"Inside the enclave: identity JSON is encrypted with a per-user DEK (KMS-wrapped, PCR-gated). The parent performs the Google HTTPS upload but only handles ciphertext — the enclave never gives it the DEK.",
+          side:{ num:"05 / 09", title:"PII encrypted in enclave · relay to vault",
+            desc:"<strong>v2 removes DRIVE_MASTER_KEY on the parent.</strong> Per-user DEK is wrapped by KMS with RecipientAttestation:PCR0. Optional defense-in-depth: final unwrap also requires a live BCH match.",
+            crypto:"// Inside enclave\nidentity := { name, phone, email, registeredAt }\nDEK_user := SecureRandom(32)\nenvelope := AES_GCM(identity, DEK_user)\nwrapped_DEK := KMS.wrap(DEK_user, PCR0=enclave)\n\n// Parent googleProxy (cipher only)\nPUT Drive user_identity.json\n  body: { v:2, encrypted, iv, tag, wrapped_DEK }\n\n// Mongo (from enclave output, all wrapped):\nphoneHash, emailHash, faceData_KMS, oauth_KMS, fileId",
+            resp:{ tags:["dpdp","soc2","pci"], text:"Operator cannot decrypt Drive blobs without attested enclave + KMS policy + (optionally) live biometric." } },
+          action:(done)=>{ renderPhoneScene("enroll-kyc"); highlightDevice("enclave",1000); setTimeout(()=>{
             makePacket({
-              fromKey:"phone", toKey:"vaultTop",
-              label:"KYC encrypted (direct)",
-              color:"#22d3ee",
-              waypoints:[
-                { x:320, y:440 },   // start of the dashed connection line
-                { x:358, y:538 },   // bezier t=0.25
-                { x:413, y:590 },   // bezier t=0.50 — deepest point under ByoSync
-                { x:486, y:598 },   // bezier t=0.75
-                { x:580, y:562 },   // end of dashed line, left edge of vault
-                ANCHOR.vaultTop,    // (640, 562) — vault centre-top
-              ],
+              fromKey:"enclaveBottom", toKey:"vaultTop",
+              label:"PII cipher ↓",
+              color:"#34d399",
               onArrive:()=>{ highlightDevice("vault",1400); setTimeout(done,700); }
             });
           },800); } },
 
-        { label:"Vault inception complete · two separate stores",
-          narration:"Registration is finished. The system now has two separate data stores with a strict separation of concerns: ByoSync DB holds auth primitives, the user's vault holds encrypted personal data.",
-          side:{ num:"06 / 09", title:"Two stores · one separation boundary",
-            desc:"The architecture enforces a hard boundary between <strong>authentication primitives</strong> and <strong>personal data</strong>. Neither store is sufficient alone — the vault is useless without the UMK (device-held), and ByoSync's DB contains no personal data to exfiltrate.",
-            crypto:"// ── ByoSync DB (auth primitives only) ──\nuser_token:    'usr_8a2f'\ndevice_pubkey: '04:3e:9c:f1:…'\nhelper_data:   'h_8a2f…'\nk2_commitment: 'kc_7fa3…'\nvault_ptr_enc: [opaque ciphertext]\nconsent_ledger: [empty until first consent]\n\n// ── User's Cloud Vault (personal data only) ──\nname:    AES-256-GCM(…) + wDEK\nphone:   AES-256-GCM(…) + wDEK\nemail:   AES-256-GCM(…) + wDEK\ndob:     AES-256-GCM(…) + wDEK\naddress: AES-256-GCM(…) + wDEK\nkyc:     AES-256-GCM(…) + wDEK\n\n// ── Phone Secure Enclave ──\nwrapped_UMK + device_key_pair",
-            resp:{ tags:["dpdp","soc2"], text:"Separation of concerns = separation of breach blast-radius. Attacker who breaches ByoSync DB: gets no PII. Attacker who breaches the cloud vault: gets encrypted blobs with no keys. Data is only useful when UMK + vault contents are combined — and UMK lives only on the device." } },
+        { label:"Vault inception complete · wrapped stores only",
+          narration:"Registration finishes. Mongo holds only hashes, KMS-wrapped BCH templates, wrapped OAuth tokens, and a Drive file pointer. The vault holds the encrypted identity envelope.",
+          side:{ num:"06 / 09", title:"Mongo + vault · no plaintext at rest",
+            desc:"Neither Mongo nor the parent server ever stored plaintext PII or usable biometric templates. Only the attested enclave briefly held plaintext during the request — then memory was wiped.",
+            crypto:"// Mongo (parent writes what enclave returns)\nphoneHash, emailHash\nfaceData[]: KMS-wrapped BCH blobs\noauth: KMS-wrapped refresh token\ndriveFiles: [{ fileId, type:'identity' }]\n\n// Google Drive\n{ v:2, encrypted, iv, tag }  // DEK inside KMS wrap\n\n// Parent invariant\nNEVER: plaintext PII, live embeddings, DEK",
+            resp:{ tags:["dpdp","soc2"], text:"Breach of parent EC2 or Mongo dump: ciphertext and hashes only — not enough to impersonate users or read identity." } },
           action:(done)=>{ renderPhoneScene("enroll-complete"); highlightDevice("phone",1200); highlightDevice("vault",1200); highlightDevice("byosync",1200); setTimeout(done,1400); } },
 
-        { label:"Future: boolean assertion tokens → ByoSync DB",
-          narration:"When a company later requests verification, ByoSync fetches the encrypted blob from the vault, computes a boolean answer in-enclave, and records a signed assertion token in its DB. The DB receives the proof — never the underlying field values.",
-          side:{ num:"07 / 09", title:"Assertion tokens flow to ByoSync DB later",
-            desc:"ByoSync DB accumulates <strong>boolean assertions and consent records</strong> over time as companies request verifications. These are cryptographic proofs, not personal data. The consent ledger and audit log grow — the personal data stays exclusively in the vault.",
-            crypto:"// What flows to ByoSync DB during consent flows:\n\nConsentLedger.append({\n  consent_id:  'con_5af23e',\n  user_token:  'usr_8a2f',\n  company:     'AcmePay',\n  fields_req:  ['age_over_18', 'kyc_verified'],\n  granted_at:  '2024-03-15 18:20 IST'\n})\n\nAuditLog.append({\n  event:       'boolean_computed',\n  consent_id:  'con_5af23e',\n  result_hash: sha256({age_over_18:true, kyc_verified:true})\n  // NOT the field values themselves\n})\n\n// Personal data still lives ONLY in the vault",
-            resp:{ tags:["dpdp","soc2"], text:"DPDP Rule 6(1)(c)+(e) — consent records and audit logs retained for 1 year. SOC 2 CC4 — monitoring. Crucially: the audit log records result hashes, not field values. Even the audit log contains no PII." } },
-          action:(done)=>{ highlightDevice("byosync",1500); setTimeout(()=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Fetch (future)",color:"#60a5fa",onArrive:()=>{ makePacket({ fromKey:"vaultTop",toKey:"byoBottom",label:"Ciphertext",color:"#22d3ee",onArrive:()=>done() }); } }); },600); } },
+        { label:"Future consent: enclave fetch → filter → encrypt-to-company",
+          narration:"Later, when a company needs data, the parent fetches the Drive ciphertext via googleProxy. The enclave decrypts, filters to consented fields, and re-encrypts to the company's public key — the parent relays ciphertext only.",
+          side:{ num:"07 / 09", title:"Share path (v2) · company decrypts",
+            desc:"See <strong>Scenario 07 — Encrypted field share</strong>. Closes the v1 gap where companies received plain JSON over HTTPS.",
+            crypto:"// Enclave (consent ACTIVE)\nblob := googleProxy.fetch(fileId)  // cipher only\nplain := decryptDrive(blob, DEK_user)  // KMS+PCR\nsubset := filter(plain, consent.sharedFields)\ncipher_co := encrypt(subset, company_pubkey)\nsign := enclave_key.sign(cipher_co)\n\n// Audit (hash-chained)\nentry_n := { event, consentId, ts, prevHash }",
+            resp:{ tags:["dpdp","soc2"], text:"ByoSync operator cannot read shared PII. Company decrypts client-side with its own private key." } },
+          action:(done)=>{ highlightDevice("enclave",1200); setTimeout(()=>{ makePacket({ fromKey:"enclaveBottom",toKey:"vaultTop",label:"Fetch cipher",color:"#60a5fa",onArrive:()=>{ makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"vsock up",color:"#f472b6",onArrive:()=>{ makePacket({ fromKey:"enclaveRight",toKey:"desktop",label:"To company",color:"#34d399",onArrive:()=>done() }); } }); } }); },600); } },
 
-        { label:"Why this order is better — comparison",
-          narration:"The alternative — routing KYC data via ByoSync first — would make ByoSync a data processor under DPDP, enlarging its compliance scope enormously. Direct-to-vault keeps ByoSync as a pure authentication intermediary.",
-          side:{ num:"08 / 09", title:"Why direct-to-vault is the right order",
-            desc:"If KYC data went to ByoSync first:<br/><br/>• ByoSync would be a <strong>data fiduciary</strong> under DPDP (huge regulatory scope)<br/>• ByoSync breach = PII breach<br/>• ByoSync becomes a single point of failure<br/><br/><strong>Direct-to-vault:</strong><br/>• ByoSync is an <strong>authentication intermediary</strong> only<br/>• ByoSync breach = zero PII exposed<br/>• Vault breach = encrypted blobs, no UMK",
-            crypto:"// ✗ WRONG order (what NOT to do):\nphone → ByoSync → re-encrypt → vault\n// ByoSync would see plaintext KYC for a moment\n// DPDP: ByoSync becomes data fiduciary\n\n// ✓ CORRECT order (this architecture):\nphone → [encrypt on-device] → vault (direct)\nphone → [auth primitives only] → ByoSync DB\n// ByoSync never sees plaintext KYC\n// DPDP: ByoSync is auth intermediary only",
-            resp:{ tags:["dpdp","soc2"], text:"DPDP Section 2(i) — data fiduciary definition. Routing personal data through ByoSync would make it a data fiduciary subject to the full obligations of Chapter II. Direct-to-vault avoids this entirely." } },
-          action:(done)=>{ highlightDevice("byosync",1000); highlightDevice("vault",1000); setTimeout(done,1400); } },
+        { label:"v1 vs v2 — why the enclave matters",
+          narration:"Today's production server decrypts in normal Node RAM. v2 moves every sensitive operation into an attested enclave so the 'zero data, not even ByoSync' claim is true for the operator.",
+          side:{ num:"08 / 09", title:"Honest migration story",
+            desc:"<strong>v1 (current):</strong> hybridDecrypt + getIdentity + BCH verify on parent → operator can see everything in RAM.<br/><br/><strong>v2 (target):</strong> parent relays ciphertext; Nitro enclave decrypts; PCR-gated KMS; encrypt-to-company.",
+            crypto:"// ✗ v1 parent (remove)\nplain := hybridDecrypt(req.body)   // in Node RAM\nidentity := decryptDrive(blob)     // DRIVE_MASTER_KEY\nsharedData := plain JSON to company\n\n// ✓ v2 target\nparent.relay(ciphertext) → enclave\nenclave → { signed, cipher_to_company }\nparent NEVER holds plain",
+            resp:{ tags:["dpdp","soc2"], text:"Aligns marketing with production. Migration order: KMS-gate keys → enclave for verify+decrypt → per-user DEK → encrypt-to-company." } },
+          action:(done)=>{ highlightDevice("byosync",1000); highlightDevice("enclave",1000); highlightDevice("vault",1000); setTimeout(done,1400); } },
 
-        { label:"Vault inception done → all scenarios ready",
-          narration:"One-time setup complete. The vault holds encrypted personal data. ByoSync holds only auth primitives and boolean assertion tokens from future consent flows. Switch to Scenario 01 to see the first consent flow.",
-          side:{ num:"09 / 09", title:"Foundation set · see next scenarios",
-            desc:"The vault is live. The separation boundary is enforced. Now every subsequent scenario (boolean proof, face-payment, plaintext view, revoke) uses this vault as its source — and ByoSync as its policy + authentication layer.",
-            crypto:"// Three independent parties, three roles:\n\nPhone (user-held)\n  → wrapped_UMK, device_key_pair\n  → activates auth, decrypts vault\n\nByoSync DB (auth + policy layer)\n  → user_token, helper_data, k2_commitment\n  → vault_ptr_enc (can't read vault)\n  → consent ledger + boolean assertions (over time)\n\nUser's Vault (data layer)\n  → encrypted KYC blobs + wrapped DEKs\n  → only decryptable with UMK (device-held)\n\n// No single party holds enough to breach the user",
-            resp:{ tags:["dpdp","soc2","pci"], text:"Defense in depth: compromising any one of the three parties (device, ByoSync, vault) is insufficient to access the user's personal data. All three would need to be compromised simultaneously." } },
+        { label:"Foundation set → try encrypted field share",
+          narration:"Vault inception is complete. Next: Scenario 01 (boolean proof) or Scenario 07 (encrypted field share) for the full user→company path under v2.",
+          side:{ num:"09 / 09", title:"Ready for consent flows",
+            desc:"Parent = blind relay. Enclave = trust. Vault = encrypted PII. Company = decrypts only what was encrypted for its pubkey.",
+            crypto:"INVARIANT (v2):\n  Parent / Mongo / operator root:\n    ciphertext + hashes only\n  Enclave:\n    brief plaintext, then zeroed\n  Company:\n    decrypts sharedData locally",
+            resp:{ tags:["dpdp","soc2","pci"], text:"Target spec: BYOSYNC_FLOW_V2_ENCLAVE_TARGET.md. Production today: see BYOSYNC_BIOMETRIC_AND_DATA_FLOW.txt (v1)." } },
           action:(done)=>{ renderPhoneScene("enroll-complete"); highlightDevice("phone",1000); highlightDevice("vault",800); setTimeout(done,1200); } },
       ],
 
@@ -1244,12 +1972,12 @@ export const SystemFlowDemo = () => {
           action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Consent prompt",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("consent-prompt"); highlightDevice("phone",1500); done(); } }); } },
         { label:"User approves with face + voice", narration:"User taps approve. A second face + voice scan signs this specific consent. Replay is impossible.", side:{ num:"06 / 09", title:"Intent-bound signature", desc:"Approval is bound to <strong>this specific consent_id, nonce, timestamp, and device key</strong>. The same scan cannot be redirected.", crypto:"intent := consent_id || fields || purpose || nonce || ts\nsig    := DeviceKey.sign(intent)\n\nPOST /v1/consent/approve\n{\n  consent_id: 'con_5af23e',\n  signature:  '0x9af1...e302'\n}", resp:{ tags:["dpdp","soc2"], text:"DPDP Section 6(1) — affirmative action. SOC 2 Processing Integrity — replay protection through nonce + timestamp + intent." } },
           action:(done)=>{ renderPhoneScene("approved"); highlightDevice("phone",1200); setTimeout(()=>{ makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Signed approval",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",1400); done(); } }); },800); } },
-        { label:"ByoSync fetches encrypted blob from vault", narration:"Policy engine validates the approval, then asks the user's vault for the encrypted fields. Ciphertext only.", side:{ num:"07 / 09", title:"Vault fetch", desc:"ByoSync's Policy Engine verifies consent, signature, and expiry — then issues a scoped fetch token. The vault returns ciphertext + wrapped DEK.", crypto:"GET /vault/usr_8a2f/fields  (scoped token)\n→ {\n   data:        AES-256-GCM(plaintext, DEK),\n   wrapped_DEK: KMS_wrap(DEK, UMK_ref),\n   policy:      consent_id, expiry\n  }", resp:{ tags:["dpdp","soc2","pci"], text:"DPDP Rule 6(1)(a) — encryption at rest. SOC 2 Confidentiality. PCI DSS Req 3 — envelope encryption pattern." } },
-          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Fetch req",color:"#60a5fa",onArrive:()=>{ highlightDevice("vault",1200); makePacket({ fromKey:"vaultTop",toKey:"byoBottom",label:"Encrypted blob",color:"#22d3ee",onArrive:()=>done() }); } }); } },
-        { label:"Compute → sign → return", narration:"Inside ByoSync's enclave, the blob is briefly decrypted, the boolean answer computed, then a signed JWS assertion is produced. Plaintext is wiped.", side:{ num:"08 / 09", title:"Compute and sign", desc:"Decryption is <strong>in-memory only</strong>. A signed JWS assertion is produced. All plaintext and intermediate keys are zeroed.", crypto:"plaintext := AES_decrypt(blob, DEK)\nresult    := { age_over_18: ..., kyc_verified: ... }\nzero(plaintext); zero(DEK)\n\nassertion := JWS_sign({consent_id, result,\n                       issued_at, expires_at},\n                       ByoSync_signing_key)", resp:{ tags:["dpdp","soc2"], text:"Data minimization: company gets the answer, not the document. SOC 2 Processing Integrity — signed outputs." } },
-          action:(done)=>{ highlightDevice("byosync",1600); setTimeout(done,1500); } },
-        { label:"Company receives signed proof", narration:"AcmePay's desktop receives a JWS proof — a few hundred bytes. No PII. No documents. The user is verified.", side:{ num:"09 / 09", title:"Proof delivered", desc:"Company stores only the <strong>signed assertion</strong> and the consent_id. <strong>No PII enters the company's database.</strong>", crypto:"{\n  consent_id:  'con_5af23e',\n  assertion: {\n    age_over_18:  true,\n    kyc_verified: true\n  },\n  issued_at:  '18:20 IST',\n  expires_at: '18:30 IST',\n  signature:  'eyJhbGc...'\n}", resp:{ tags:["dpdp","soc2","pci"], text:"DPDP — company stores no PII → Rule 6/7/8 scope shrinks. SOC 2 Confidentiality maintained." } },
-          action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"Signed proof",color:"#60a5fa",onArrive:()=>{ renderDesktopScene("result-boolean"); highlightDevice("desktop",1400); setTimeout(()=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Audit log",color:"#34d399",onArrive:()=>done() }); },500); } }); } },
+        { label:"Parent fetches Drive ciphertext (googleProxy)", narration:"Policy engine validates consent, then the parent calls Google Drive on behalf of the enclave. Only the encrypted identity blob crosses the wire — never plaintext.", side:{ num:"07 / 09", title:"Vault fetch · cipher only", desc:"The <strong>googleProxy</strong> on the parent performs HTTPS to Drive. The enclave issued a scoped fetch instruction; the parent cannot decrypt the blob.", crypto:"// Parent googleProxy\nrefresh := KMS.unwrap(oauth)  // enclave-only path\nblob_cipher := Drive.files.get(fileId)\nvsock → enclave: blob_cipher\n\n// Parent never: decryptDrive(blob)", resp:{ tags:["dpdp","soc2","pci"], text:"OAuth refresh token also KMS-wrapped — unwrap only inside enclave." } },
+          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"googleProxy fetch",color:"#60a5fa",onArrive:()=>{ highlightDevice("vault",1200); makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"Cipher ↑",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1200); done(); } }); } }); } },
+        { label:"Nitro enclave: decrypt → boolean → sign", narration:"Inside the attested enclave the blob is decrypted, the boolean answer computed, then a signed JWS assertion is produced. Plaintext and DEK are zeroed before the response leaves the enclave.", side:{ num:"08 / 09", title:"Compute in TEE · wipe RAM", desc:"Decryption and computation happen <strong>only inside Nitro</strong>. The parent receives a signed assertion — not field values.", crypto:"// Nitro enclave only\nplain := decryptDrive(blob, DEK_user)\nresult := { age_over_18: true, kyc_verified: true }\nzero(plain); zero(DEK_user)\n\nassertion := JWS_sign({ consent_id, result, ... })\nvsock → parent: assertion\n\naudit.append({ event, prevHash: SHA256(prev) })", resp:{ tags:["dpdp","soc2"], text:"Hash-chained audit. Operator cannot read result fields from server RAM." } },
+          action:(done)=>{ highlightDevice("enclave",1600); setTimeout(done,1500); } },
+        { label:"Company receives signed proof", narration:"AcmePay receives a JWS proof — a few hundred bytes. No PII. No documents. The user is verified.", side:{ num:"09 / 09", title:"Proof delivered", desc:"Company stores only the <strong>signed assertion</strong> and the consent_id. <strong>No PII enters the company's database.</strong>", crypto:"{\n  consent_id:  'con_5af23e',\n  assertion: { age_over_18: true, kyc_verified: true },\n  signature:  'eyJhbGc...'\n}\n\n// For field-level PII → Scenario 07 (encrypt-to-company)", resp:{ tags:["dpdp","soc2","pci"], text:"Boolean path: minimal disclosure. Field share uses company pubkey encryption (v2)." } },
+          action:(done)=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Signed proof ↑",color:"#60a5fa",onArrive:()=>{ highlightDevice("byosync",800); makePacket({ fromKey:"byoRight",toKey:"desktop",label:"JWS out",color:"#60a5fa",onArrive:()=>{ renderDesktopScene("result-boolean"); highlightDevice("desktop",1400); setTimeout(()=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>done() }); },500); } }); } }); } },
       ],
       payment: [
         { label:"User picks item, proceeds to checkout", narration:"On the partner's e-commerce app, the user picks an item worth ₹2,500. Their card was tokenized at first save — it lives in the vault as a token, not a PAN.", side:{ num:"01 / 10", title:"Checkout begins · no PAN on partner", desc:"The partner has never stored the user's card number. Only <strong>tok_card_4382</strong>. The real PAN sits encrypted in the user's vault.", crypto:"// Partner DB row\nuser_id:       'usr_8a2f'\npayment_token: 'tok_card_4382'\n// No PAN, no CVV — out of CDE.", resp:{ tags:["pci"], text:"PCI DSS 4.0.1 Req 3 — storing tokens not PAN dramatically reduces the partner's Cardholder Data Environment scope." } },
@@ -1271,7 +1999,7 @@ export const SystemFlowDemo = () => {
         { label:"Partner submits to payment processor", narration:"Partner submits the tokenized card + amount + SCA proof to the payment processor.", side:{ num:"09 / 11", title:"Processor captures payment", desc:"Processor receives <strong>tok_card_4382 + amount + SCA proof</strong>. Processor de-tokenizes inside its PCI-CDE environment.", crypto:"POST processor.com/v1/charge\n{\n  payment_token: 'tok_card_4382',\n  amount: 250000, currency: 'INR',\n  sca_proof: '<JWS>'\n}\n→ de-tokenize → Issuer auth → Capture", resp:{ tags:["pci"], text:"The only PCI CDE here is the payment processor's. Partner and ByoSync are out of scope." } },
           action:(done)=>{ renderDesktopScene("payment-checkout"); highlightDevice("desktop",1300); setTimeout(done,1100); } },
         { label:"Processor confirms · audit committed", narration:"Payment captured. ByoSync writes the audit entry.", side:{ num:"10 / 11", title:"Confirmation + audit", desc:"Audit log is <strong>append-only, hash-chained, WORM</strong>. Immutable record of every factor used.", crypto:"audit.append({\n  event: 'payment_authorized',\n  user_id: 'usr_8a2f', merchant: 'AcmePay',\n  amount: 250000,\n  factors: ['face', 'voice', 'device_key']\n})", resp:{ tags:["pci","soc2","dpdp"], text:"PCI DSS Req 10 — log and monitor. SOC 2 CC4. DPDP Rule 6(1)(c)+(e) — logs retained 1 year minimum." } },
-          action:(done)=>{ renderDesktopScene("payment-success"); highlightDevice("desktop",1300); makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Audit log",color:"#34d399",onArrive:()=>done() }); } },
+          action:(done)=>{ renderDesktopScene("payment-success"); highlightDevice("desktop",1300); makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>done() }); } },
         { label:"What this is — and isn't", narration:"ByoSync was the proof, not the payment rail. The face authorized a key that signed the intent.", side:{ num:"11 / 11", title:"Honest boundary", desc:"ByoSync is the <strong>SCA layer</strong>, not a payment aggregator. It produces proof of human presence + intent. Payment moves through your existing processor.", crypto:"// ByoSync IS\n• SCA factor provider\n• Intent-binding service\n• Audit evidence emitter\n\n// ByoSync IS NOT\n• Payment aggregator (RBI)\n• Card storage (PCI CDE)", resp:{ tags:["pci","dpdp"], text:"PCI scope on processor; auth scope on ByoSync; commerce on partner. Legally and operationally sustainable." } },
           action:(done)=>{ highlightDevice("byosync",1200); highlightDevice("desktop",1200); setTimeout(done,1400); } },
       ],
@@ -1287,25 +2015,229 @@ export const SystemFlowDemo = () => {
         { label:"User approves · intent bound to employee", narration:"User reads, considers, approves. The signature is bound to Priya specifically.", side:{ num:"05 / 08", title:"Approval bound to employee", desc:"Approval signature contains <strong>the specific employee identity</strong>. Any other employee = signature mismatch = denied.", crypto:"intent := consent_id || emp_id || fields ||\n          ticket || nonce || ts\nsig    := DeviceKey.sign(intent)\n→ Grant bound to emp_id='Priya·4521'", resp:{ tags:["dpdp","soc2"], text:"DPDP — intent binding tied to specific human. SOC 2 — minimum-privilege at finest granularity." } },
           action:(done)=>{ renderPhoneScene("approved"); highlightDevice("phone",1200); setTimeout(()=>{ makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Approved",color:"#34d399",onArrive:()=>done() }); },700); } },
         { label:"Vault → enclave → watermarked render", narration:"Encrypted address proof travels to ByoSync. Document is rendered server-side with Priya's watermark, then streamed to her screen.", side:{ num:"06 / 08", title:"Render, not raw plaintext", desc:"Decryption in-memory only. Priya's browser receives a rendered view with watermark baked in, not the underlying file.", crypto:"blob  := Vault.fetch('address_proof')\nDEK   := KMS.unwrap(blob.wrapped_DEK, policy)\nplain := AES_decrypt(blob.data, DEK)\nrendered := overlayWatermark(plain, emp_id+ts)\nstream := SessionEnclave.stream(rendered, ttl=15m)", resp:{ tags:["dpdp","soc2","pci"], text:"<strong>Honest caveat: a phone camera can still photograph any screen. Watermark = forensic trace, not perfect prevention.</strong>" } },
-          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Fetch",color:"#60a5fa",onArrive:()=>{ makePacket({ fromKey:"vaultTop",toKey:"byoBottom",label:"Encrypted",color:"#22d3ee",onArrive:()=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"Watermarked view",color:"#f87171",onArrive:()=>{ renderDesktopScene("plaintext-view"); highlightDevice("desktop",1300); done(); } }); } }); } }); } },
+          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"googleProxy fetch",color:"#60a5fa",onArrive:()=>{ highlightDevice("vault",1000); makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"Cipher ↑",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1200); makePacket({ fromKey:"enclaveRight",toKey:"desktop",label:"Watermarked stream",color:"#f87171",onArrive:()=>{ renderDesktopScene("plaintext-view"); highlightDevice("desktop",1300); done(); } }); } }); } }); } },
         { label:"Session expires · plaintext wiped", narration:"Fifteen minutes later, the session enclave destroys itself. Plaintext zeroed. DEK zeroed.", side:{ num:"07 / 08", title:"Auto-destroy", desc:"On expiry: <strong>zero plaintext</strong>, <strong>zero DEK</strong>, <strong>terminate session</strong>. Audit entries hash-chained.", crypto:"zero(plaintext); zero(DEK); zero(session_keys)\nSessionEnclave.destroy(session_id)\naudit.append({\n  event: 'plaintext_viewed', emp_id: 'Priya·4521',\n  duration_actual: '14m22s', view_count: 6\n})", resp:{ tags:["dpdp","soc2"], text:"DPDP Rule 6(1)(c)+(e) — logs retained 1 year. SOC 2 CC4 — monitoring." } },
-          action:(done)=>{ renderDesktopScene("session-expired"); highlightDevice("desktop",1300); makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Audit",color:"#34d399",onArrive:()=>done() }); } },
+          action:(done)=>{ renderDesktopScene("session-expired"); highlightDevice("desktop",1300); makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>done() }); } },
         { label:"User dashboard updates with view receipt", narration:"User sees on their phone exactly who viewed what, when, and for how long.", side:{ num:"08 / 08", title:"Receipt + transparency", desc:"<strong>Transparency is part of the architecture</strong>, not an afterthought. Every employee at every company, timestamped.", crypto:"// Dashboard entry\n{\n  company: 'AcmePay', employee: 'Priya S.',\n  field: 'address_proof', view_count: 6,\n  duration: '14m22s', ended_at: '18:43 IST'\n}", resp:{ tags:["dpdp"], text:"DPDP Section 11 — right to information about processing. Section 13 — grievance redressal." } },
           action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"View receipt",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("dashboard"); highlightDevice("phone",1300); done(); } }); } },
       ],
       revoke: [
-        { label:"User opens dashboard, sees active consents", narration:"User opens the ByoSync dashboard from any partner app. Every company with active access is listed.", side:{ num:"01 / 06", title:"Dashboard", desc:"All active consents on one screen. Withdrawal must be <strong>as easy as approval</strong> by law (DPDP Section 6(4)).", crypto:"active := ByoSync.list({user: 'usr_8a2f'})\n→ [\n   { company: 'AcmePay',  fields: ['kyc'] },\n   { company: 'NeoBank',  fields: ['address'] },\n   { company: 'ZipCart',  fields: ['age'] }\n]", resp:{ tags:["dpdp"], text:"DPDP Section 6(4) — withdrawal as easy as approval. Section 11 — right to information." } },
+        { label:"User opens dashboard, sees active consents", narration:"User opens the ByoSync dashboard from any partner app. Every company with active access is listed.", side:{ num:"01 / 08", title:"Dashboard + lineage chain", desc:"All active consents on one screen. Withdrawal must be <strong>as easy as approval</strong> by law (DPDP Section 6(4)).", crypto:"active := ByoSync.list({user: 'usr_8a2f'})\n→ [\n   { company: 'AcmePay',  fields: ['kyc'] },\n   { company: 'NeoBank',  fields: ['address'] },\n   { company: 'ZipCart',  fields: ['age'] }\n]", resp:{ tags:["dpdp"], text:"DPDP Section 6(4) — withdrawal as easy as approval. Section 11 — right to information." } },
           action:(done)=>{ renderPhoneScene("dashboard"); highlightDevice("phone",1300); setTimeout(done,1000); } },
-        { label:"User taps 'Revoke AcmePay'", narration:"User selects AcmePay and taps revoke. ByoSync requires a face + voice confirmation.", side:{ num:"02 / 06", title:"Revocation signed", desc:"Intent string: literal 'REVOKE' + consent_id + nonce. Signed by device key.", crypto:"intent := 'REVOKE' || consent_id || nonce || ts\nsig    := DeviceKey.sign(intent)\n\nPOST /v1/consent/revoke\n{\n  consent_id: 'con_5af23e', signature: sig\n}", resp:{ tags:["dpdp"], text:"DPDP Section 6(4) — withdrawal. Section 6(6) — processing must cease." } },
+        { label:"User taps 'Revoke AcmePay'", narration:"User selects AcmePay and taps revoke. ByoSync requires a face + voice confirmation.", side:{ num:"02 / 08", title:"Revocation signed", desc:"Intent string: literal 'REVOKE' + consent_id + nonce. Signed by device key.", crypto:"intent := 'REVOKE' || consent_id || nonce || ts\nsig    := DeviceKey.sign(intent)\n\nPOST /v1/consent/revoke\n{\n  consent_id: 'con_5af23e', signature: sig\n}", resp:{ tags:["dpdp"], text:"DPDP Section 6(4) — withdrawal. Section 6(6) — processing must cease." } },
           action:(done)=>{ renderPhoneScene("dashboard"); highlightDevice("phone",1100); setTimeout(()=>{ makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Revoke",color:"#f87171",onArrive:()=>{ highlightDevice("byosync",1300); done(); } }); },700); } },
-        { label:"ByoSync invalidates active grants", narration:"Consent record flipped to REVOKED. Any live session is terminated immediately.", side:{ num:"03 / 06", title:"Cascade invalidation", desc:"<strong>Active sessions are terminated mid-flight.</strong> New requests bearing the old consent_id return 410 Gone.", crypto:"ConsentLedger.update(con_5af23e, {\n  status: 'REVOKED', revoked_at: now\n})\nfor grant in active_grants(con_5af23e):\n   grant.status := 'INVALID'\n   SessionEnclave.terminate(grant.session_id)", resp:{ tags:["dpdp","soc2"], text:"DPDP Section 6(6) — cease processing on withdrawal. SOC 2 Processing Integrity." } },
-          action:(done)=>{ renderPhoneScene("revoked"); highlightDevice("byosync",1500); setTimeout(done,1200); } },
-        { label:"Webhook → company", narration:"ByoSync fires a signed webhook to AcmePay's backend: 'consent.revoked.'", side:{ num:"04 / 06", title:"Company notified", desc:"Webhook is cryptographically signed. AcmePay must acknowledge and purge cached tokens. Contractually mandatory.", crypto:"POST https://acmepay.com/webhooks/byosync\n{\n  event: 'consent.revoked',\n  consent_id: 'con_5af23e',\n  user_token: 'usr_8a2f',\n  revoked_at: '18:42 IST'\n}", resp:{ tags:["dpdp"], text:"DPDP Rule 6(1)(f) — contract must require honoring revocation. Section 8(7) — erasure on withdrawal." } },
-          action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"consent.revoked",color:"#f87171",onArrive:()=>{ renderDesktopScene("revoked-notification"); highlightDevice("desktop",1400); done(); } }); } },
-        { label:"What revocation cannot do", narration:"Revocation blocks the future. It cannot retract what was already lawfully viewed and stored.", side:{ num:"05 / 06", title:"Honest boundary", desc:"If AcmePay viewed plaintext under prior consent, revocation cannot undo the viewing. ByoSync's defense: <strong>boolean by default</strong>, <strong>view-only watermarked plaintext</strong>, <strong>contractual erasure</strong>.", crypto:"// Revocation CAN\n  ✓ Block future API calls\n  ✓ Terminate live sessions\n  ✓ Invalidate cached tokens\n\n// Revocation CANNOT\n  ✗ Un-see what was lawfully viewed\n  ✗ Reach into an air-gapped backup", resp:{ tags:["dpdp"], text:"Enforcement is contractual + regulatory, not cryptographic." } },
-          action:(done)=>{ highlightDevice("desktop",1100); setTimeout(done,1300); } },
-        { label:"Audit committed · user confirmed", narration:"Final audit log entry written, hash-chained. The user's phone shows revocation confirmed.", side:{ num:"06 / 06", title:"Audit and confirmation", desc:"WORM-stored. Retained for one year minimum. The user can export their history; the regulator can audit any company.", crypto:"audit.append({\n  event: 'consent_revoked',\n  consent_id: 'con_5af23e',\n  webhook_ack: '202 OK',\n  prev_hash: '0x4e2f...',\n  event_hash: '0x9af3...'\n})", resp:{ tags:["dpdp","soc2"], text:"DPDP Rule 6(1)(c)+(e) — logs and 1-year retention. SOC 2 CC4 — monitoring." } },
-          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Audit log",color:"#34d399",onArrive:()=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Confirmed",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("revoked"); done(); } }); } }); } },
+        { label:"ByoSync invalidates active grants", narration:"Consent record flipped to REVOKED. Any live session is terminated immediately.", side:{ num:"03 / 08", title:"Consent REVOKED", desc:"<strong>Active sessions are terminated mid-flight.</strong> New requests bearing the old consent_id return 410 Gone.", crypto:"ConsentLedger.update(con_5af23e, {\n  status: 'REVOKED', revoked_at: now\n})\nfor grant in active_grants(con_5af23e):\n   grant.status := 'INVALID'\n   SessionEnclave.terminate(grant.session_id)", resp:{ tags:["dpdp","soc2"], text:"DPDP Section 6(6) — cease processing on withdrawal. SOC 2 Processing Integrity." } },
+          action:(done)=>{ renderPhoneScene("revoked"); highlightDevice("byosync",1000); setTimeout(()=>{
+            makePacket({ fromKey:"byoBottom",toKey:"enclaveTop",label:"Cascade ↓",color:"#f472b6",onArrive:()=>{
+              highlightDevice("enclave",1200); makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Tokens dead",color:"#f87171",onArrive:()=>{ done(); } });
+            } });
+          },500); } },
+        { label:"Cascade · delegated tokens + lineage REVOKED", narration:"v3: revoking consent c1 marks all lineage edges rooted in c1 as REVOKED. Delegated tokens (A→B, B→agent) invalidate. Redis OCSP-style check fails closed on next unlock.", side:{ num:"04 / 08", title:"Cascade invalidation (v3)",
+            desc:"Downstream companies and agents lose OPERATE unlock immediately. VERIFY booleans unaffected. Multi-hop A2A tokens inherit shortest TTL and break when upstream revokes.",
+            crypto:"revoke(c1)\n→ lineage.edges.where(root=c1).status := REVOKED\n→ delegated_jtis.invalidate(all downstream)\n→ Redis.set(jti, REVOKED)\n\n// Next unlock attempt\nunlock(token) → 403 REVOKED",
+            resp:{ tags:["dpdp","soc2"], text:"DPDP §6(6) cease processing. Runtime enforcement — not grant-time only." } },
+          action:(done)=>{ highlightDevice("enclave",1400); highlightDevice("companyB",1000); setTimeout(done,1200); } },
+        { label:"Webhook → Company A + B", narration:"ByoSync fires signed webhooks: consent.revoked + deletion_required. Each recipient must confirm erasure within N hours.", side:{ num:"05 / 08", title:"Webhooks + deletion callback",
+            desc:"SDK contract: <strong>confirmDeletion(tokenJti)</strong> within SLA. Non-confirmation → compliance dashboard flag.",
+            crypto:"POST acmepay.com/webhooks/byosync\n{ event:'consent.revoked', consent_id, jti }\nPOST delhivery.com/webhooks/byosync\n{ event:'deletion_required', jti, deadline }\n\n// Recipient must:\nPOST /v1/deletion/confirm { jti, proof }",
+            resp:{ tags:["dpdp"], text:"DPDP erasure + Rule 6 logs. GDPR Art 17 deletion propagation." } },
+          action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"consent.revoked",color:"#f87171",onArrive:()=>{
+            renderDesktopScene("revoked-notification"); highlightDevice("desktop",1000);
+            makePacket({ fromKey:"byoRight",toKey:"coB",label:"deletion_req",color:"#f87171",onArrive:()=>{ highlightDevice("companyB",1200); done(); } });
+          } }); } },
+        { label:"What revocation cannot do", narration:"Revocation blocks the future. It cannot retract what was already lawfully viewed and stored.", side:{ num:"06 / 08", title:"Honest boundary", desc:"If AcmePay viewed plaintext under prior consent, revocation cannot undo the viewing. ByoSync's defense: <strong>boolean by default</strong>, <strong>view-only watermarked plaintext</strong>, <strong>contractual erasure</strong>.", crypto:"// Revocation CAN\n  ✓ Block future API calls\n  ✓ Terminate live sessions\n  ✓ Invalidate cached tokens\n\n// Revocation CANNOT\n  ✗ Un-see what was lawfully viewed\n  ✗ Reach into an air-gapped backup", resp:{ tags:["dpdp"], text:"Enforcement is contractual + regulatory, not cryptographic." } },
+          action:(done)=>{ highlightDevice("desktop",1100); setTimeout(done,1000); } },
+        { label:"Hash-chained audit + erasure tombstone", narration:"Final audit entry appended with prevHash. ByoSync writes erasure tombstone (proves deletion without retaining data). User dashboard shows readable lineage chain now REVOKED.", side:{ num:"07 / 08", title:"Tamper-evident audit (v3)", desc:"WORM-stored. Retained for one year minimum. The user can export their history; the regulator can audit any company.", crypto:"audit.append({\n  event: 'consent_revoked',\n  consent_id: 'con_5af23e',\n  webhook_ack: '202 OK',\n  prev_hash: '0x4e2f...',\n  event_hash: '0x9af3...'\n})", resp:{ tags:["dpdp","soc2"], text:"DPDP Rule 6(1)(c)+(e) — logs and 1-year retention. SOC 2 CC4 — monitoring." } },
+          action:(done)=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Chain view",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("revoked"); done(); } }); } }); } },
+        { label:"Fail-closed · no future unlock", narration:"Any company or agent presenting a revoked jti receives 403. OPERATE data was never handed over and forgotten — each use required live unlock.", side:{ num:"08 / 08", title:"Runtime enforcement",
+            desc:"Honest flag: OPERATE data already delivered cannot be un-forwarded. v3 minimizes OPERATE; VERIFY default; lineage makes the compliant path easy.",
+            crypto:"// Company B next API call\nPOST /unlock { jti: revoked_jti }\n→ 403 CONSENT_REVOKED\n\n// Agent A2A task resume\nGET /kya/status → REVOKED",
+            resp:{ tags:["dpdp","soc2"], text:"Spec: BYOSYNC_FLOW_V3_LINEAGE_A2A_COMPLIANCE.md §11.2" } },
+          action:(done)=>{ highlightDevice("byosync",800); highlightDevice("enclave",800); highlightDevice("companyB",800); setTimeout(done,1000); } },
+      ],
+
+      /* ── SCENARIO 08: Lineage re-share (v3 §9) ─────────────────────── */
+      lineage_reshare: [
+        { label:"User consented OPERATE field to Company A", narration:"Under consent #1, AcmePay holds an encrypted OPERATE field (e.g. address) received via enclave encrypt-to-company. ByoSync logged lineage edge USER→A.", side:{ num:"01 / 07", title:"OPERATE · minimal set",
+            desc:"VERIFY fields (boolean) never leave enclave as raw. OPERATE is the exception — shared with TTL, deletion callback, lineage.",
+            crypto:"lineageId: ln_8a2f\nedges: [{ seq:1, from:USER, to:AcmePay,\n  purpose:'delivery', consentId:c1, jti, expiresAt }]\nstatus: ACTIVE",
+            resp:{ tags:["dpdp"], text:"Purpose limitation. User dashboard shows readable chain." } },
+          action:(done)=>{ renderDesktopScene("result-boolean"); highlightDevice("desktop",1200); setTimeout(done,900); } },
+
+        { label:"Company A requests re-share to Company B", narration:"AcmePay needs Delhivery (last-mile). The only sanctioned path is a re-share request through ByoSync — not a side-channel forward.", side:{ num:"02 / 07", title:"Re-share API",
+            desc:"Request carries dataRef, fromCo:A, toCo:B, purpose P2, fields [F]. ByoSync checks if consent #1 permits onward transfer.",
+            crypto:"POST /v1/lineage/reshare\n{\n  lineageId, fromCo:'AcmePay', toCo:'Delhivery',\n  purpose:'last_mile', fields:['address'],\n  tag: 'SUB_PROCESSOR' | 'TRANSFEREE_FIDUCIARY'\n}",
+            resp:{ tags:["dpdp"], text:"Compliant path is easy; bypass is contract breach." } },
+          action:(done)=>{ makePacket({ fromKey:"desktop",toKey:"byoRight",label:"Re-share req",color:"#fbbf24",onArrive:()=>{ highlightDevice("byosync",1300); done(); } }); } },
+
+        { label:"Transferee? → user consent #2 (biometric)", narration:"If B is an independent transferee fiduciary, ByoSync prompts the user on phone. Sub-processor may be pre-authorized if contract on file — still logged.", side:{ num:"03 / 07", title:"Re-consent gate",
+            desc:"DPDP treats sub-processor vs transferee differently. Tag on toCo drives whether fresh biometric consent is required.",
+            crypto:"if tag == TRANSFEREE_FIDUCIARY:\n  pushConsentPrompt(user, B, P2, fields)\n  require biometric approve\nelse SUB_PROCESSOR:\n  log + continue if contract valid",
+            resp:{ tags:["dpdp"], text:"Free, specific, informed consent for new fiduciary." } },
+          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Consent #2?",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("consent-prompt"); highlightDevice("phone",1400); setTimeout(()=>{
+            makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Approved",color:"#34d399",onArrive:()=>{ done(); } });
+          },700); } }); } },
+
+        { label:"Enclave re-encrypts field F to B's pubkey", narration:"Inside Nitro: decrypt is NOT on parent. Enclave unwraps DEK (KMS+PCR), extracts field F, re-encrypts to Delhivery's registered public key. Plaintext zeroed.", side:{ num:"04 / 07", title:"Re-encrypt in TEE",
+            desc:"Parent relays ciphertext only. Operator never sees address plaintext during re-share.",
+            crypto:"plain := decryptDrive(blob, DEK_user)  // enclave only\nf := plain.address\nzero(plain)\ncipher_B := RSA_encrypt(f, pubkey_Delhivery)\nsign := enclave_sign(cipher_B)",
+            resp:{ tags:["soc2"], text:"Hybrid RSA-OAEP + AES-GCM per §12." } },
+          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"enclaveTop",label:"vsock down",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1500); setTimeout(()=>{
+            makePacket({ fromKey:"enclaveRight",toKey:"coBLeft",label:"cipher to B",color:"#fbbf24",onArrive:()=>{ highlightDevice("companyB",1400); done(); } });
+          },500); } }); } },
+
+        { label:"Lineage edge A → B written", narration:"Consent ledger appends edge seq:2 with consentId c2, tokenJti, expiresAt, prevHash. User dashboard updates.", side:{ num:"05 / 07", title:"Lineage system of record",
+            desc:"Exportable, machine-readable, 7-year retention. Hash-chained tamper evidence.",
+            crypto:"edges.append({ seq:2, from:'AcmePay', to:'Delhivery',\n  purpose:'last_mile', consentId:c2, jti, expiresAt,\n  prevHash: SHA256(entry_prev) })",
+            resp:{ tags:["dpdp"], text:"Logs of transfers to transferee fiduciaries — Rule 4." } },
+          action:(done)=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"ln edge ↑",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",1200); setTimeout(done,800); } }); } },
+
+        { label:"Company B decrypts locally", narration:"Delhivery receives cipher + its own consent record. Decrypts with B's private key — ByoSync never had plaintext.", side:{ num:"06 / 07", title:"B as independent controller",
+            desc:"Deletion callback contract applies to B's copy on revoke/expiry.",
+            crypto:"shared := RSA_decrypt(cipher_B, privkey_Delhivery)\n// ByoSync DB: no plaintext address",
+            resp:{ tags:["dpdp"], text:"Purpose P2 only. TTL enforced." } },
+          action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"coB",label:"consent c2",color:"#34d399",onArrive:()=>{ highlightDevice("companyB",1200); done(); } }); } },
+
+        { label:"Documents: re-verify, not re-transfer", narration:"For a degree PDF or KYC pack, default path is boolean re-verification from vault — B never receives the file unless explicit OPERATE consent.", side:{ num:"07 / 07", title:"Document default",
+            desc:"Honest: cannot prevent forward of OPERATE already delivered. Minimize OPERATE; prefer VERIFY.",
+            crypto:"// Default\nGET /verify?field=degree_verified → { true }\n\n// Exception\nOPERATE + TTL + deletion_cb + lineage",
+            resp:{ tags:["dpdp"], text:"v3 §9.3 — re-verification not re-transfer." } },
+          action:(done)=>{ highlightDevice("vault",1000); highlightDevice("enclave",1000); highlightDevice("companyB",1000); setTimeout(done,1200); } },
+      ],
+
+      /* ── SCENARIO 09: A2A worked flows (6 phases · 3 data classes) ─── */
+      a2a_agent: [
+        { label:"Phase 0 — Session mandate (User → User Agent)", narration:"User authorizes their A2A client for a bounded goal: astrology + buy gemstone + pay. Scope and TTL cap what the User Agent may do — not open-ended delegation.",
+          side:{ num:"01 / 11", title:"Phase 0 · Authorize",
+            desc:"Session mandate: goal, scope, expiry, nonce. Each remote agent later gets its own narrowed token (shrink-only delegation).",
+            crypto:"mandate := sign(goal, scope, ttl, nonce)\nuser_agent.session := mandate",
+            resp:{ tags:["dpdp","soc2"], text:"Agent authority is bounded and revocable from the start." } },
+          action:(done)=>{ setDesktopChrome("REMOTE AGENT · ShopCo"); renderPhoneScene("mandate-a2a"); highlightDevice("phone",1200); setTimeout(()=>{
+            makePacket({ fromKey:"phone",toKey:"agent",label:"Mandate",color:"#a78bfa",onArrive:()=>{ renderPhoneScene("approved"); highlightDevice("userAgent",1400); done(); } });
+          },600); } },
+
+        { label:"Phase 1 — Discover remote Agent Card + KYA", narration:"User Agent fetches /.well-known/agent-card.json. Checks A2A signature, KYA JWS (principal + dataClasses), and revocation endpoint before any data moves.",
+          side:{ num:"02 / 11", title:"Phase 1 · Discover + trust",
+            desc:"Three tiers in KYA: VERIFY (boolean only), OPERATE-STANDARD (scoped share), OPERATE-SENSITIVE (external agents refused). ShopCo may receive birth/address class, never instruments.",
+            crypto:"verify(A2A_card_sig)\nverify(KYA_JWS) → dataClasses\nGET /kya/status → ACTIVE",
+            resp:{ tags:["soc2"], text:"A2A proves domain; KYA proves accountable principal." } },
+          action:(done)=>{ renderDesktopScene("a2a-agent-card"); makePacket({ fromKey:"agentRight",toKey:"desktop",label:"Agent Card",color:"#a78bfa",onArrive:()=>{ highlightDevice("desktop",1400); done(); } }); } },
+
+        { label:"Phase 2 — Classify fields + consolidated consent", narration:"Task needs age (VERIFY → boolean), address (OPERATE-STANDARD), payment (intent — no instrument). One biometric tap mints verify-token, consent-token, and intent-token.",
+          side:{ num:"03 / 11", title:"Phase 2 · Classify + consent",
+            desc:"Example C (shopping) in one screen. Astrology would get OPERATE-STANDARD birth fields only; payment never shares card/bank (OPERATE-SENSITIVE prohibited).",
+            crypto:"verify_token(age18)\nconsent_token(address, TTL=delivery+7d)\nintent_token(₹499, TTL=5min)",
+            resp:{ tags:["dpdp"], text:"Informed before share — specific fields, agent, purpose, TTL." } },
+          action:(done)=>{ makePacket({ fromKey:"agentRight",toKey:"byoLeft",label:"Classify",color:"#22d3ee",onArrive:()=>{ highlightDevice("byosync",700); makePacket({ fromKey:"byoBottom",toKey:"enclaveTop",label:"vsock",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",900); makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Consent",color:"#a78bfa",onArrive:()=>{ renderPhoneScene("consent-a2a-shopping"); highlightDevice("phone",1200); setTimeout(()=>{
+              renderPhoneScene("approved"); makePacket({ fromKey:"phone",toKey:"byoLeft",label:"3 tokens",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",1000); done(); } });
+            },700); } }); } }); } }); } },
+
+        { label:"Phase 3 — A2A task (token only, no raw PII)", narration:"User Agent dispatches A2A task to remote agent. Parts hold tokenized refs; metadata carries consent tokens — raw birth date, address, and PAN never ride in the message.",
+          side:{ num:"04 / 11", title:"Phase 3 · Dispatch",
+            desc:"Agent-to-agent message is a redeemable claim. Intercepted tasks leak no PII.",
+            crypto:"POST /a2a/tasks\nparts: [{ ref: byosync://vault/... }]\nmetadata: { verifyToken, consentToken, intentToken }",
+            resp:{ tags:["dpdp"], text:"Minimization: data fetched only at runtime unlock." } },
+          action:(done)=>{ renderDesktopScene("a2a-task"); makePacket({ fromKey:"agentRight",toKey:"desktop",label:"A2A task",color:"#a78bfa",onArrive:()=>{ highlightDevice("desktop",1400); done(); } }); } },
+
+        { label:"Phase 4a — Verify-token → boolean (no DOB)", narration:"Remote agent redeems verify-token. Enclave returns age18plus:true — date of birth never leaves the vault.",
+          side:{ num:"05 / 11", title:"Phase 4a · VERIFY unlock",
+            desc:"VERIFY class: nobody receives raw; Argon2id hash → yes/no inside enclave.",
+            crypto:"unlock(verify_token) → boolean(age18)\n// DOB stays in vault",
+            resp:{ tags:["dpdp"], text:"Age-restricted commerce without revealing DOB." } },
+          action:(done)=>{ makePacket({ fromKey:"desktop",toKey:"byoRight",label:"verify-token",color:"#22d3ee",onArrive:()=>{ highlightDevice("byosync",700); makePacket({ fromKey:"byoBottom",toKey:"enclaveTop",label:"vsock",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",900); makePacket({ fromKey:"enclaveRight",toKey:"desktop",label:"age18: true",color:"#34d399",onArrive:()=>{ renderDesktopScene("a2a-boolean"); highlightDevice("desktop",1200); done(); } }); } }); } }); } },
+
+        { label:"Phase 4b — Consent-token → address (encrypt-to-agent)", narration:"Remote agent redeems consent-token. Enclave checks jti ACTIVE, scope, TTL — then releases only delivery address, re-encrypted to ShopCo's public key.",
+          side:{ num:"06 / 11", title:"Phase 4b · OPERATE-STANDARD unlock",
+            desc:"Astrology path is the same pattern with {dob,birthTime,birthCity} only — name, phone, payment never in scope.",
+            crypto:"unlock(consent_token)\n  Redis jti == ACTIVE\nvault → enclave → ECIES(agent_pubkey)",
+            resp:{ tags:["soc2"], text:"Runtime fail-closed: revoke kills next unlock." } },
+          action:(done)=>{ makePacket({ fromKey:"desktop",toKey:"byoRight",label:"consent-token",color:"#a78bfa",onArrive:()=>{ highlightDevice("byosync",700); makePacket({ fromKey:"byoBottom",toKey:"enclaveTop",label:"check jti",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",800); makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"fetch",color:"#34d399",onArrive:()=>{ highlightDevice("vault",800); makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"cipher ↑",color:"#f472b6",onArrive:()=>{ makePacket({ fromKey:"enclaveRight",toKey:"desktop",label:"address enc",color:"#34d399",onArrive:()=>{ highlightDevice("desktop",1200); done(); } }); } }); } }); } }); } }); } },
+
+        { label:"Phase 4c — Payment intent (no instrument on wire)", narration:"Intent-token authorizes ₹499 to merchant — ByoSync never sees PAN, bank, or UPI. Payment rail charges the instrument it already holds; lineage records authorization only.",
+          side:{ num:"07 / 11", title:"Phase 4c · Intent (AP2)",
+            desc:"OPERATE-SENSITIVE is a hard no for external agents. Payment = signed intent, not a data share.",
+            crypto:"intent := { amount:499, payee, jti, TTL:5m }\n// no card/bank in token\nrail.charge(user_instrument)",
+            resp:{ tags:["pci","dpdp"], text:"Biometric binds human presence to payment — zero instrument exposure." } },
+          action:(done)=>{ renderPhoneScene("approved"); makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Intent ₹499",color:"#fbbf24",onArrive:()=>{ highlightDevice("byosync",1000); makePacket({ fromKey:"byoRight",toKey:"desktop",label:"intent OK",color:"#fbbf24",onArrive:()=>{ highlightDevice("desktop",1200); done(); } }); } }); } },
+
+        { label:"Phase 5 — Artifact + lineage edges", narration:"ShopCo places order and returns artifact. ByoSync writes separate lineage edges for VERIFY boolean, OPERATE address share, and payment authorization event.",
+          side:{ num:"08 / 11", title:"Phase 5 · Artifact + lineage",
+            desc:"Orchestrated flow (§6): AstroCorp birth share, ShopCo address, MerchantM intent — each token agent-bound; revoke session cascades all three.",
+            crypto:"lineage: USER→ShopCo (age:VERIFY)\nlineage: USER→ShopCo (addr:OPERATE)\nlineage: USER→MerchantM (intent)",
+            resp:{ tags:["dpdp"], text:"DPDP system-of-record: who received what, when, for what purpose." } },
+          action:(done)=>{ renderDesktopScene("a2a-artifact-order"); makePacket({ fromKey:"desktop",toKey:"agent",label:"Artifact",color:"#34d399",onArrive:()=>{ highlightDevice("userAgent",800); makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"lineage ×3",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",1200); done(); } }); } }); } },
+
+        { label:"Phase 6a — Revoke: future access cut instantly", narration:"User revokes session mandate. All downstream consent, verify, and intent tokens invalidate — next runtime unlock fails closed (guaranteed on ByoSync's side).",
+          side:{ num:"09 / 11", title:"Phase 6a · Revoke (guaranteed)",
+            desc:"Honest claim: agent may have seen authorized fields; user cuts off all further access immediately.",
+            crypto:"revoke(session) → cascade(jti_*)\nRedis: all tokens REVOKED",
+            resp:{ tags:["dpdp","soc2"], text:"Phase 4 enforcement teeth — fail-closed at use-time." } },
+          action:(done)=>{ renderPhoneScene("dashboard"); highlightDevice("phone",1000); setTimeout(()=>{ renderPhoneScene("revoked"); makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Revoke",color:"#f87171",onArrive:()=>{ highlightDevice("byosync",1000); renderDesktopScene("revoked-notification"); highlightDevice("desktop",1200); done(); } }); },700); } },
+
+        { label:"Phase 6b — Deletion callback (directed + verified)", narration:"On TTL or revoke, deletion callback fires. ShopCo must confirmDeletion(jti); non-confirmation is flagged — ByoSync verifies, cannot physically force erasure on third-party systems.",
+          side:{ num:"10 / 11", title:"Phase 6b · Deletion callback",
+            desc:"Address TTL = delivery+7d. Astrology birth data deleted on expiry. User directs deletion; ByoSync records confirmation.",
+            crypto:"POST /deletion-callback { jti }\n→ agent.confirmDeletion(jti)\n→ audit: CONFIRMED | BREACH",
+            resp:{ tags:["dpdp"], text:"Minimization + short TTL limit what a non-deleting agent retains." } },
+          action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"delete?",color:"#f87171",onArrive:()=>{ highlightDevice("desktop",1000); setTimeout(done,900); } }); } },
+
+        { label:"Dashboard — orchestrated lineage view", narration:"User sees three separate edges: AstroCorp birth (deleted), ShopCo address (expires), MerchantM ₹499 intent (instrument never shared). Multi-hop tokens were never reusable across agents.",
+          side:{ num:"11 / 11", title:"Orchestrated recap (§6)",
+            desc:"One mandate fans to AstroCorp + ShopCo + payment rail. Each hop had its own narrowed token; revoke cascaded all.",
+            crypto:"// tokens never cross agents\nastro_token ≠ shop_token ≠ intent_token",
+            resp:{ tags:["dpdp"], text:"Informed consent + control — not prevention of legitimate OPERATE-STANDARD shares." } },
+          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Lineage",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("dashboard-a2a"); highlightDevice("phone",1400); highlightDevice("userAgent",1000); done(); } }); } },
+      ],
+
+      /* ── SCENARIO 07: Encrypted field share (v2 · in-person) ─────────── */
+      encrypted_share: [
+        { label:"Employee verifies face → hybrid ciphertext to enclave",
+          narration:"An employee scans their face; the payload is hybrid-encrypted. The parent relays it to the Nitro enclave for BCH verification — the parent never sees embedding bits.",
+          side:{ num:"01 / 06", title:"Employee gate in enclave",
+            desc:"Same vsock pattern as user login. Templates are KMS-wrapped in Mongo; only the enclave can unwrap them for matching.",
+            crypto:"POST /employees/verify-face (hybrid cipher)\nparent → vsock → enclave.verifyFace(emp)\n← { verified: true }",
+            resp:{ tags:["soc2"], text:"Privileged actions require biometric proof inside the TEE." } },
+          action:(done)=>{ highlightDevice("desktop",1200); makePacket({ fromKey:"desktop",toKey:"byoRight",label:"Emp verify",color:"#fbbf24",onArrive:()=>{ highlightDevice("byosync",1300); done(); } }); } },
+
+        { label:"User face scan → share-data ciphertext",
+          narration:"The data principal scans face (2 frames). share-data body is hybrid-encrypted and relayed. Inside the enclave: BCH match, consent ACTIVE, hash-chained audit entries.",
+          side:{ num:"02 / 06", title:"Consent created in enclave",
+            desc:"All consent state changes run through the enclave. v2 requires hybrid encryption on approve/revoke/share routes (closes v1 plain-body gaps).",
+            crypto:"enclave.shareData({\n  phoneHash, faceId_cipher, fields, purposes\n})\n→ Consent ACTIVE\n→ audit: NOTICE_SENT, CONSENT_GIVEN\n  (prevHash chained)",
+            resp:{ tags:["dpdp"], text:"DPDP Sec 5 notice + Sec 6 consent recorded tamper-evidently." } },
+          action:(done)=>{ makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Share cipher",color:"#22d3ee",onArrive:()=>{ highlightDevice("byosync",800); makePacket({ fromKey:"byoBottom",toKey:"enclaveTop",label:"vsock ↓",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1400); done(); } }); } }); } },
+
+        { label:"Enclave asks parent to fetch Drive blob",
+          narration:"The enclave requests the encrypted identity file. Parent googleProxy downloads ciphertext from Google; the blob is handed back to the enclave over vsock.",
+          side:{ num:"03 / 06", title:"Fetch · parent has no DEK",
+            desc:"Parent performs TLS to Google. Enclave holds OAuth unwrap + Drive decrypt capability — not the relay tier.",
+            crypto:"enclave → parent: FETCH(fileId)\nparent → Drive: GET user_identity.json\nparent → enclave: { encrypted, iv, tag }",
+            resp:{ tags:["dpdp","soc2"], text:"Separation: network on parent, secrets in enclave." } },
+          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"googleProxy fetch",color:"#60a5fa",onArrive:()=>{ highlightDevice("vault",1000); makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"Cipher ↑",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1200); done(); } }); } }); } },
+
+        { label:"Enclave decrypts · filters · encrypt-to-company",
+          narration:"Inside Nitro: decrypt identity, keep only consented fields, encrypt the subset to the company's registered public key, sign with the enclave key. Memory wiped.",
+          side:{ num:"04 / 06", title:"No plain JSON to company",
+            desc:"<strong>v2 closes the v1 hole</strong> where sharedData was plain HTTPS JSON. ByoSync API relays ciphertext; the company decrypts with its own private key.",
+            crypto:"plain := decryptDrive(blob, DEK_user)\nsubset := pick(plain, consent.sharedFields)\ncipher_co := RSA_encrypt(subset, company_pubkey)\nout := enclave_sign(cipher_co)\nzero(plain); zero(DEK_user)",
+            resp:{ tags:["dpdp","soc2"], text:"Operator cannot read shared name/phone/email. Subpoena of parent logs yields ciphertext only." } },
+          action:(done)=>{ highlightDevice("enclave",1600); setTimeout(()=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"cipher_co ↑",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",800); done(); } }); },600); } },
+
+        { label:"Company decrypts sharedData locally",
+          narration:"AcmePay's backend receives encrypted sharedData + enclave signature. It decrypts client-side and shows only the consented fields in the employee console.",
+          side:{ num:"05 / 06", title:"Company-held private key",
+            desc:"Prerequisite: company registered an RSA public key with ByoSync during onboarding.",
+            crypto:"// Company server\nshared := RSA_decrypt(cipher_co, company_privkey)\n// → { fullName, phone, ... } per consent\n\n// ByoSync never stored this plaintext",
+            resp:{ tags:["dpdp"], text:"Purpose limitation: only fields listed in ACTIVE consent." } },
+          action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"Encrypted share",color:"#34d399",onArrive:()=>{ renderDesktopScene("result-boolean"); highlightDevice("desktop",1400); done(); } }); } },
+
+        { label:"Invariant · operator blindness",
+          narration:"Parent EC2, Mongo, and ByoSync engineers see ciphertext and hashes — never plaintext PII or live biometric bits.",
+          side:{ num:"06 / 06", title:"v2 invariant",
+            desc:"This is the target claim: <strong>zero data, not even ByoSync.</strong> Requires Nitro + PCR-gated KMS (see migration order in spec).",
+            crypto:"Parent sees:  hybrid cipher in, signed/cipher out\nEnclave sees:  brief plaintext, then zeroed\nCompany sees:  decrypts only its ciphertext\nMongo sees:    wrapped templates, hashes",
+            resp:{ tags:["soc2","dpdp"], text:"v2 enclave + v3 lineage spec." } },
+          action:(done)=>{ highlightDevice("byosync",1000); highlightDevice("enclave",1000); highlightDevice("vault",1000); setTimeout(done,1200); } },
       ],
 
       /* ── SCENARIO 05: Vault Data Update ────────────────────────────────
@@ -1367,7 +2299,7 @@ export const SystemFlowDemo = () => {
             desc:"<strong>Append-only WORM audit log.</strong> Retroactive modification is impossible. A regulator or the user can verify the complete update history at any time.",
             crypto:"audit.append({\n  event: 'vault_data_updated',\n  user_token: 'usr_8a2f',\n  fields: ['address', 'kyc'],\n  version_before: 1,\n  version_after:  2,\n  initiated_by: 'user_self',\n  prev_hash: '0x3b7e...',\n  event_hash: '0xa12f...'\n})\n\n// Vault version pointer updated\nvault_version := 2",
             resp:{ tags:["dpdp","soc2"], text:"DPDP Rule 6(1)(c)+(e) — logs retained 1 year. SOC 2 CC4 — monitoring. Provides irrefutable evidence of when and what changed." } },
-          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Audit log",color:"#34d399",onArrive:()=>done() }); } },
+          action:(done)=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>done() }); } },
 
         { label:"Update complete · old DEKs gone · forward secrecy achieved",
           narration:"UMK is re-wrapped and sealed in the Secure Enclave. Old DEKs are permanently zeroed. Any prior vault snapshot is now cryptographically useless.",
@@ -1434,7 +2366,7 @@ export const SystemFlowDemo = () => {
             desc:"ByoSync's DB now recognises the new device. Old device access can be revoked in one tap. <strong>A device stolen before recovery approval cannot be used</strong> — the new_wrapped_UMK bound to the old key is no longer valid.",
             crypto:"// ByoSync DB update\nIdentityRegistry.update('usr_8a2f', {\n  device_pubkey: new_device_pubkey,\n  prev_device_pubkey: old_device_pubkey,\n  prev_device_status: 'pending-revocation',\n  recovered_at: now\n})\n\n// Audit entry\naudit.append({\n  event: 'device_recovered',\n  user_token: 'usr_8a2f',\n  old_device: old_device_pubkey[:8]+'…',\n  new_device: new_device_pubkey[:8]+'…'\n})",
             resp:{ tags:["soc2","dpdp"], text:"SOC 2 CC6.2 — device de-provisioning. DPDP — user controls their own device trust list. Immediate revocation available from the dashboard." } },
-          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Audit log",color:"#34d399",onArrive:()=>{ renderDesktopScene("enroll-registered"); highlightDevice("byosync",1300); done(); } }); } },
+          action:(done)=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>{ renderDesktopScene("enroll-registered"); highlightDevice("byosync",1300); done(); } }); } },
 
         { label:"Recovery complete · vault accessible from new device",
           narration:"New phone can now decrypt the vault: it holds the re-wrapped UMK, the vault pointer, and has biometric templates captured via fresh enrollment on the new device.",
@@ -1454,8 +2386,8 @@ export const SystemFlowDemo = () => {
       const scen = SCENARIOS[currentScenario];
       if (!scen) return;
       if (currentStep === 0) {
-        const titles: Record<string,string> = { vault_inception:"Vault inception · one-time setup", boolean:"Boolean proof flow (default)", payment:"Face-payment, PCI-DSS aligned", plaintext:"Plaintext view-only (high-risk)", revoke:"Consent revocation flow", data_update:"Vault data update · KYC refresh", new_device:"New device · vault recovery" };
-        const descs: Record<string,string> = { vault_inception:"One-time registration with a strict data separation: auth primitives (helper_data, k2, device_pubkey) go to ByoSync DB; personal data (name, phone, email, KYC) goes DIRECTLY to the user's encrypted vault, bypassing ByoSync entirely. Boolean assertion tokens flow to ByoSync DB only when consent flows are used later.", boolean:"Default and safest path. The company never sees PII. Only a signed boolean answer.", payment:"Face + voice SCA on a tokenized payment. PAN never touched by partner or ByoSync.", plaintext:"Used only when a company genuinely needs to display a document. View-only, watermarked.", revoke:"User can revoke any consent at any time. Future access blocked instantly.", data_update:"User updates their KYC data — new address, expired ID, or corrected details. Fresh per-field DEKs are generated; old DEKs are zeroed for forward secrecy. Data is written DIRECTLY to the vault; ByoSync is excluded. Active consent holders are notified via a signed data.updated webhook.", new_device:"User gets a new phone. New device keypair is generated in the Secure Enclave; the old device approves the transfer; the UMK is re-wrapped for the new device key. ByoSync DB is updated with the new device_pubkey. The entire flow transmits zero PII." };
+        const titles: Record<string,string> = { vault_inception:"Vault inception · v2 enclave", boolean:"Boolean proof (default)", payment:"Face-payment · PCI", plaintext:"Plaintext view (high-risk)", revoke:"Revoke + cascade · v3", lineage_reshare:"Lineage re-share · v3", a2a_agent:"A2A agent-to-agent · worked flows", encrypted_share:"Encrypted field share · v2", data_update:"Vault data update", new_device:"New device recovery" };
+        const descs: Record<string,string> = { vault_inception:"Registration: hybrid cipher → DB → Nitro enclave → vault. Mongo + lineage ledger store wrapped blobs only.", boolean:"Boolean answers in Nitro. Signed JWS to Company A — no field values.", payment:"Face + voice SCA on tokenized payment intent. PAN never on ByoSync.", plaintext:"High-risk: googleProxy fetch → enclave decrypt → watermarked stream.", revoke:"v3 cascade: lineage REVOKED, delegated JWTs dead, webhooks + deletion callbacks, hash-chain audit.", lineage_reshare:"Sanctioned A→B re-share through enclave re-encrypt. Lineage edge + consent #2 for transferee.", a2a_agent:"Six phases (0–6): mandate → KYA card → 3-tier consent → A2A task → runtime unlock → artifact/lineage → revoke + deletion. Shopping + orchestrated §6.", encrypted_share:"In-person share: enclave encrypt-to Company A pubkey.", data_update:"KYC refresh with forward secrecy; cipher to vault.", new_device:"Old device approves · KMS re-wrap." };
         c.innerHTML = `<div class="sf-entry"><div class="sf-entry-num">Step 0 · Ready</div><div class="sf-entry-title">${titles[currentScenario]}</div><div class="sf-entry-desc">${descs[currentScenario]}</div></div>`;
         return;
       }
@@ -1479,7 +2411,7 @@ export const SystemFlowDemo = () => {
       if (totalEl) totalEl.textContent = String(total);
       if (fill)    fill.style.width    = total===0 ? "0%" : Math.min(100,(currentStep/total)*100)+"%";
       if (narr) {
-        if (currentStep===0)     narr.innerHTML = "Choose a scenario above and press <strong>Play</strong>. Watch how data, keys, and signed proofs travel between the user's phone, ByoSync's control plane, the user's cloud vault, and the company's workstation.";
+        if (currentStep===0)     narr.innerHTML = "Choose a scenario above and press <strong>Play</strong>. Target v3 (on v2 enclave): Consent Manager rail with lineage ledger, A→B re-share, Google A2A + KYA, cascade revoke, and runtime fail-closed tokens. Spec: BYOSYNC_FLOW_V3_LINEAGE_A2A_COMPLIANCE.md.";
         else if (currentStep > total) narr.innerHTML = "Flow complete. Press <strong>Reset</strong> to restart, or switch scenarios above.";
         else narr.textContent = (SCENARIOS[currentScenario]||[])[currentStep-1]?.narration || "";
       }
@@ -1503,7 +2435,7 @@ export const SystemFlowDemo = () => {
         if (!playing) return;
         const scen = SCENARIOS[currentScenario]||[];
         if (currentStep >= scen.length) { pauseFn(); return; }
-        advanceAnimated(() => { playTimeout = setTimeout(loop, 800); });
+        advanceAnimated(() => { playTimeout = setTimeout(loop, 1700); });
       }
       loop();
     }
@@ -1521,12 +2453,20 @@ export const SystemFlowDemo = () => {
       if (layer) while (layer.firstChild) layer.removeChild(layer.firstChild);
       renderPhoneIdle();
       renderDesktopIdle();
+      setDesktopChrome("COMPANY A · AcmePay");
       renderDossier();
       updateMeter();
     }
+    function applyScenarioLayout(name: string) {
+      const isA2a = name === "a2a_agent";
+      container.classList.toggle("sf-scene-a2a", isA2a);
+      if (!isA2a) setDesktopChrome("COMPANY A · AcmePay");
+    }
+
     function switchScenario(name: string) {
       pauseFn();
       currentScenario = name;
+      applyScenarioLayout(name);
       container.querySelectorAll<HTMLButtonElement>(".sf-tab").forEach(tab => {
         tab.classList.toggle("sf-active", tab.dataset.scenario===name);
         if (tab.dataset.scenario === name) {
@@ -1538,6 +2478,7 @@ export const SystemFlowDemo = () => {
 
     /* ── init ── */
     drawScene();
+    applyScenarioLayout(currentScenario);
     renderDossier();
     updateMeter();
 
@@ -1619,33 +2560,60 @@ export const SystemFlowDemo = () => {
   }, []);
 
   return (
-    <div id="byosync-sf" ref={containerRef}>
+    <div
+      id="byosync-sf"
+      ref={containerRef}
+      className={isFullscreen ? "sf-fullscreen" : "sf-embedded"}
+      style={isFullscreen ? { marginTop: "3.5rem" } : undefined}
+    >
       <style dangerouslySetInnerHTML={{ __html: SF_CSS }} />
 
-      {/* ── Section header (dark band — navy / cyan) ── */}
+      {/* ── Compact legend + scenarios (fullscreen) or full header (embedded) ── */}
+      <div className="sf-top-strip">
+      {isFullscreen ? (
+        <div className="sf-legend" aria-label="Diagram legend">
+          <div className="sf-legend-row"><span className="sf-lg-dot" style={{color:"#5dc97e",background:"#5dc97e"}} />Phone</div>
+          <div className="sf-legend-row sf-legend-a2a-row"><span className="sf-lg-dot" style={{color:"#a78bfa",background:"#a78bfa"}} />Agent</div>
+          <div className="sf-legend-row"><span className="sf-lg-dot" style={{color:"#1d4ed8",background:"#1d4ed8"}} />DB</div>
+          <div className="sf-legend-row"><span className="sf-lg-dot" style={{color:"#f472b6",background:"#f472b6"}} />Enclave</div>
+          <div className="sf-legend-row"><span className="sf-lg-dot" style={{color:"#38bdf8",background:"#38bdf8"}} />Co. A</div>
+          <div className="sf-legend-row"><span className="sf-lg-dot" style={{color:"#fbbf24",background:"#fbbf24"}} />Co. B</div>
+          <div className="sf-legend-row"><span className="sf-lg-dot" style={{color:"#00e5d3",background:"#00e5d3"}} />Vault</div>
+        </div>
+      ) : null}
       <div className="sf-header">
-        <p className="sf-eyebrow">Animated Architecture · Step by Step</p>
+        <p className="sf-eyebrow">Target architecture · v3 · lineage + A2A + compliance</p>
         <h2 className="sf-h2">
           See exactly how <span>trust moves</span><br />through ByoSync.
         </h2>
         <p className="sf-subtitle">
-          Every data flow, every cryptographic operation, every compliance clause — animated, narrated, and honest about limits. Pick a scenario and press Play.
+          v3 extends the v2 enclave stack: ByoSync as Consent Manager (lineage ledger, hash-chain audit), sanctioned Company A→B re-share, Google A2A agent overlay with KYA credentials, and cascade revoke with deletion callbacks. Decrypt only in Nitro — between DB and vault.
         </p>
         {/* Legend */}
         <div className="sf-legend">
           <div className="sf-legend-row">
-            <span className="sf-lg-dot" style={{color:"#2563eb",background:"#2563eb"}} />User / Phone
+            <span className="sf-lg-dot" style={{color:"#5dc97e",background:"#5dc97e"}} />User / Phone
+          </div>
+          <div className="sf-legend-row sf-legend-a2a-row">
+            <span className="sf-lg-dot" style={{color:"#a78bfa",background:"#a78bfa"}} />User agent (A2A)
           </div>
           <div className="sf-legend-row">
-            <span className="sf-lg-dot" style={{color:"#1d4ed8",background:"#1d4ed8"}} />ByoSync Control Plane
+            <span className="sf-lg-dot" style={{color:"#1d4ed8",background:"#1d4ed8"}} />ByoSync DB + lineage
           </div>
           <div className="sf-legend-row">
-            <span className="sf-lg-dot" style={{color:"#94a3b8",background:"#94a3b8"}} />Company / Workstation
+            <span className="sf-lg-dot" style={{color:"#f472b6",background:"#f472b6"}} />Nitro enclave
           </div>
           <div className="sf-legend-row">
-            <span className="sf-lg-dot" style={{color:"#3b82f6",background:"#3b82f6"}} />User Vault Cloud
+            <span className="sf-lg-dot" style={{color:"#38bdf8",background:"#38bdf8"}} />Company A
+          </div>
+          <div className="sf-legend-row">
+            <span className="sf-lg-dot" style={{color:"#fbbf24",background:"#fbbf24"}} />Company B · lineage
+          </div>
+          <div className="sf-legend-row">
+            <span className="sf-lg-dot" style={{color:"#00e5d3",background:"#00e5d3"}} />User vault
           </div>
         </div>
+      </div>
       </div>
 
       {/* ── Scenario Tabs ── */}
@@ -1656,12 +2624,12 @@ export const SystemFlowDemo = () => {
           <button className="sf-tab sf-active" data-scenario="vault_inception">
             <div className="sf-sc-num">SCENARIO · 00</div>
             <div className="sf-sc-title">Vault inception</div>
-            <div className="sf-sc-desc">Auth primitives → ByoSync DB. Personal data → vault direct.</div>
+            <div className="sf-sc-desc">Hybrid cipher → Nitro enclave → wrapped Mongo + Drive.</div>
           </button>
           <button className="sf-tab" data-scenario="boolean">
             <div className="sf-sc-num">SCENARIO · 01</div>
             <div className="sf-sc-title">Boolean proof</div>
-            <div className="sf-sc-desc">The default safe path. Company never sees PII.</div>
+            <div className="sf-sc-desc">Decrypt in Nitro · signed assertion only.</div>
           </button>
           <button className="sf-tab" data-scenario="payment">
             <div className="sf-sc-num">SCENARIO · 02</div>
@@ -1675,16 +2643,31 @@ export const SystemFlowDemo = () => {
           </button>
           <button className="sf-tab" data-scenario="revoke">
             <div className="sf-sc-num">SCENARIO · 04</div>
-            <div className="sf-sc-title">Revoke consent</div>
-            <div className="sf-sc-desc">Future access cut. Past access traced.</div>
+            <div className="sf-sc-title">Revoke + cascade</div>
+            <div className="sf-sc-desc">Lineage REVOKED · deletion callbacks · fail-closed.</div>
+          </button>
+          <button className="sf-tab" data-scenario="lineage_reshare">
+            <div className="sf-sc-num">SCENARIO · 05</div>
+            <div className="sf-sc-title">Lineage re-share</div>
+            <div className="sf-sc-desc">A→B through enclave · consent #2 · ledger edge.</div>
+          </button>
+          <button className="sf-tab" data-scenario="a2a_agent">
+            <div className="sf-sc-num">SCENARIO · 06</div>
+            <div className="sf-sc-title">A2A agent-to-agent</div>
+            <div className="sf-sc-desc">6 phases · 3 data classes · orchestrated.</div>
+          </button>
+          <button className="sf-tab" data-scenario="encrypted_share">
+            <div className="sf-sc-num">SCENARIO · 07</div>
+            <div className="sf-sc-title">Encrypted share</div>
+            <div className="sf-sc-desc">Enclave → encrypt-to-company pubkey.</div>
           </button>
           <button className="sf-tab" data-scenario="data_update">
-            <div className="sf-sc-num">SCENARIO · 05</div>
+            <div className="sf-sc-num">SCENARIO · 08</div>
             <div className="sf-sc-title">Vault data update</div>
             <div className="sf-sc-desc">KYC refresh, forward secrecy, cache invalidation.</div>
           </button>
           <button className="sf-tab" data-scenario="new_device">
-            <div className="sf-sc-num">SCENARIO · 06</div>
+            <div className="sf-sc-num">SCENARIO · 09</div>
             <div className="sf-sc-title">New device recovery</div>
             <div className="sf-sc-desc">Old device approves · UMK re-wrapped · zero PII.</div>
           </button>
@@ -1698,31 +2681,44 @@ export const SystemFlowDemo = () => {
             <button id="sf-playBtn" className="sf-btn sf-btn-primary"><span>▶</span>Play</button>
             <button id="sf-stepBtn" className="sf-btn sf-btn-ghost"><span>›</span>Step</button>
             <button id="sf-resetBtn" className="sf-btn sf-btn-ghost"><span>↻</span>Reset</button>
+            <div className="sf-zoom-controls" role="group" aria-label="Diagram zoom">
+              <button type="button" className="sf-btn sf-btn-ghost sf-zoom-btn" onClick={zoomOut} aria-label="Zoom out" title="Zoom out">−</button>
+              <span className="sf-zoom-label" id="sf-zoom-label">{Math.round(zoom * 100)}%</span>
+              <button type="button" className="sf-btn sf-btn-ghost sf-zoom-btn" onClick={zoomIn} aria-label="Zoom in" title="Zoom in">+</button>
+              <button type="button" className="sf-btn sf-btn-ghost sf-zoom-btn sf-zoom-fit" onClick={zoomFit} aria-label="Fit full diagram in view" title="Fit to screen">Fit</button>
+            </div>
             <div className="sf-step-meter">
               <span>Step <strong id="sf-stepNum">0</strong>/<strong id="sf-stepTotal">0</strong></span>
               <div className="sf-timeline"><div className="sf-timeline-fill" id="sf-timelineFill" /></div>
             </div>
             <div className="sf-kbd-hint">
-              <kbd>←</kbd><kbd>→</kbd> navigate &nbsp; <kbd>Space</kbd> play/pause
+              <kbd>←</kbd><kbd>→</kbd> step &nbsp; <kbd>Space</kbd> play &nbsp; <kbd>Ctrl</kbd>+wheel zoom
             </div>
           </div>
           <div className="sf-scene-frame">
-            <svg id="sf-scene" className="sf-scene" viewBox="0 0 1280 760" xmlns="http://www.w3.org/2000/svg" />
-          </div>
-          <div id="sf-narration" className="sf-narration">
-            Choose a scenario above and press <strong>Play</strong>. Watch how data, keys, and signed proofs travel between the user&apos;s phone, ByoSync&apos;s control plane, the user&apos;s cloud vault, and the company&apos;s workstation.
+            <div className="sf-scene-viewport" ref={viewportRef} title="Scroll to pan · Ctrl+wheel to zoom">
+              <div
+                className="sf-scene-inner"
+                style={{ transform: `scale(${zoom})` }}
+              >
+                <svg id="sf-scene" className="sf-scene" viewBox={`0 0 ${SCENE_W} ${SCENE_H}`} xmlns="http://www.w3.org/2000/svg" aria-label="ByoSync v3 architecture: phone, user agent, database, enclave, vault, and companies" />
+              </div>
+            </div>
           </div>
         </section>
 
         <aside className="sf-dossier">
           <div className="sf-dossier-head">Dossier · current step</div>
+          <div id="sf-narration" className="sf-narration sf-narration-in-panel">
+            Choose a scenario above and press <strong>Play</strong>. v3: lineage ledger, A→B re-share, A2A+KYA, cascade revoke — on v2 Nitro enclave between DB and vault.
+          </div>
           <div id="sf-dossierBody">
             <div className="sf-entry">
               <div className="sf-entry-num">Step 0 · Ready</div>
               <div className="sf-entry-title">Press <em>Play</em></div>
               <div className="sf-entry-desc">
                 Each step shows what&apos;s happening on each device, what cryptography is running, and which clauses of <strong>DPDP Rules 2025</strong>, <strong>SOC 2</strong>, and <strong>PCI DSS v4.0.1</strong> apply.<br /><br />
-                <strong>Core principle:</strong> face and voice never encrypt data. They authorize the Secure Enclave to release a random User Master Key.
+                <strong>v3 on v2:</strong> enclave decrypts; DB holds lineage + hash-chain audit; VERIFY default, OPERATE minimal. Specs: BYOSYNC_FLOW_V2_ENCLAVE_TARGET.md + BYOSYNC_FLOW_V3_LINEAGE_A2A_COMPLIANCE.md.
               </div>
             </div>
           </div>

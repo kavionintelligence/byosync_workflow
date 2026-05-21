@@ -8,30 +8,12 @@ export const metadata = {
 
 export default function SystemFlowPage() {
   return (
-    <div className="min-h-screen overflow-x-clip bg-[#07080f] text-slate-50">
+    <div className="h-screen overflow-hidden bg-[#07080f] text-slate-50">
       {/* Shared navigation bar from the main app */}
       <Navbar />
 
-      {/* Spacer to push content below fixed navbar */}
-      <div className="h-16" />
-
-      {/* Full interactive system-flow demo */}
-      <SystemFlowDemo />
-
-      {/* Minimal footer */}
-      <footer className="border-t border-white/5 bg-[#07080f] py-8 sm:py-10">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6">
-          <p className="text-slate-600 text-[10px] font-mono tracking-widest uppercase">
-            © {new Date().getFullYear()} ByoSync Infrastructure Layer
-          </p>
-          <a
-            href="/"
-            className="text-[11px] font-mono tracking-widest uppercase text-slate-500 hover:text-brand-blue transition-colors"
-          >
-            ← Back to Home
-          </a>
-        </div>
-      </footer>
+      {/* Full-viewport demo — fits below navbar without page scroll */}
+      <SystemFlowDemo mode="fullscreen" />
     </div>
   );
 }

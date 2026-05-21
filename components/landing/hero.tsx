@@ -32,8 +32,8 @@ export const Hero = () => {
               PROOF OF HUMAN PRESENCE INFRASTRUCTURE
             </Badge>
             <h1 className="mb-4 text-[clamp(1.85rem,5vw+1rem,4.5rem)] font-extrabold leading-[1.08] tracking-tighter text-blue-950 sm:mb-6">
-              The Trust Bridge <br />
-              <span className="text-blue-600">Between Users and Platforms.</span>
+              Your identity. Your data. <br />
+              <span className="text-blue-600">Your control.</span>
             </h1>
             <p className="mb-8 max-w-xl text-base leading-relaxed text-blue-800 sm:mb-10 sm:text-lg md:text-xl">
               Users control what they share. Platforms get the proof and data they need — with consent and logs built in.

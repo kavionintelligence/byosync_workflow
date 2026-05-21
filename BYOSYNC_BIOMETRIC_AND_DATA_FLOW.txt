@@ -1,0 +1,427 @@
+================================================================================
+BYOSYNC — BIOMETRIC VERIFICATION, ENCRYPTION, AND USER→COMPANY DATA FLOW
+================================================================================
+Generated: 2026-05-20
+Requested path: byosync_web-main\byosync_web-main
+
+IMPORTANT — THREE REPOS IN THIS WORKSPACE
+-----------------------------------------
+1) byosync_web-main\byosync_web-main
+   - Marketing / landing site (Next.js). Navbar "Demo" links to production app.
+   - Interactive architecture story: components/landing/system-flow-demo.tsx
+   - Does NOT run face scan, Drive upload, or consent APIs in production.
+
+2) data-sharing-client-main
+   - Production UI: https://datasharing.byosync.in
+   - Biometric capture (camera, ONNX, MediaPipe), hybrid RSA+AES encrypt, API calls.
+
+3) data-sharing-server-main
+   - Production API: https://datasharingapi.byosync.in/api/v1
+   - BCH verify, MongoDB (hashes + templates), Google Drive fetch, decrypt identity.
+
+This document describes the REAL end-to-end flow (client + server) and notes what
+byosync_web-main shows as product/education only.
+
+
+================================================================================
+PART 1 — HIGH-LEVEL ARCHITECTURE (WHAT TRAVELS WHERE)
+================================================================================
+
+Three data classes:
+
+  A) RAW BIOMETRICS (face images, audio)
+     - Processed ON THE USER'S BROWSER (client).
+     - Never stored as photos on ByoSync server.
+     - Sent to server only as: ArcFace embedding vectors OR BCH-derived bit patterns
+       inside JSON payloads (then wrapped in hybrid encryption for sensitive routes).
+
+  B) AUTH / POLICY DATA (MongoDB on server)
+     - phoneHash, emailHash (HMAC-style identifiers — not plaintext phone/email)
+     - faceData[] — BCH registration records per enrolled frame (NOT raw face images)
+     - voiceData — BCH + embeddings for voice (optional)
+     - Consent records: companyId, userId, sharedFields[], status, validUntil, audit
+     - Encrypted Google OAuth refresh token (AES-GCM envelope)
+     - driveFiles[].fileId — pointer to user_identity.json on Google Drive
+
+  C) PERSONAL DATA (PII: name, phone, email, KYC fields, etc.)
+     - Plaintext exists briefly on client during forms.
+     - At registration: encrypted ON SERVER with AES-256-GCM (per-user key from userId)
+       then uploaded to USER'S Google Drive as user_identity.json.
+     - MongoDB does NOT store plaintext PII (by design).
+     - When company needs data: SERVER decrypts Drive blob in memory, filters fields
+       allowed by ACTIVE consent, returns JSON to company dashboard API response.
+
+
+ByoSync layer role:
+  - Identity broker + consent ledger + biometric gatekeeper.
+  - NOT the long-term plaintext PII database (that's user's Drive + consent filter).
+
+
+================================================================================
+PART 2 — BIOMETRIC VERIFICATION (DETAILED)
+================================================================================
+
+2.1 WHERE PROCESSING HAPPENS
+----------------------------
+| Step                         | Location (repo / file)                    |
+|-----------------------------|-------------------------------------------|
+| Camera capture              | Browser — data-sharing-client-main        |
+| Face mesh / pose guidance   | MediaPipe Face Mesh — Scan.jsx, faceVerify |
+| Face bbox for liveness      | faceDetector.js (MediaPipe)               |
+| Liveness anti-spoof ONNX    | liveness.js (ONNX Runtime Web)            |
+| ArcFace 512-d embedding     | faceRecognition.js (face.onnx)            |
+| Voice embedding (optional)  | voiceRecognition.js + server ONNX/Python  |
+| BCH fuzzy extractor         | bch_integration.js (WASM) client + server |
+| Match / enroll decision     | SERVER — bch_integration.js + controllers |
+| Store templates             | SERVER MongoDB user.faceData[]            |
+
+2.2 REGISTRATION SCAN (50 FRAMES) — USER SIGNUP
+-----------------------------------------------
+Route: /user/scan  →  src/pages/Scan.jsx
+
+Flow:
+  1. User completes form on UserRegister.jsx (name, phone, email).
+  2. User connects Google Drive (OAuth) — refresh token held in server session
+     during registration, later stored encrypted in MongoDB.
+  3. User sent to /user/scan with state.totalFrames = 50 (default).
+
+  Per frame (loop until 50 embeddings collected):
+    a) Webcam frame → MediaPipe Face Mesh landmarks.
+    b) Optional: runLivenessCheck() on face crop (ONNX) — first frame gated.
+    c) getArcFaceEmbedding() → 512-dimensional float vector (ONNX ArcFace).
+    d) Store embedding in React state array `embeddings[]`.
+    e) UI shows head-pose arrows (pitch/yaw/roll guidance).
+
+  After 50 frames:
+    f) faceId := embeddings  (array of 50 × 512-d vectors — NOT BCH yet on this path)
+    g) navigate("/user/register", { state: { faceId, restoreForm } })
+
+  UserRegister.jsx POST /user/register:
+    h) Build payload: { fullName, phoneNumber, email, faceId, cloudProvider }
+    i) hybridEncrypt(payload, SERVER_RSA_PUBLIC_KEY)  →  src/crypto/aes.js
+    j) POST /api/v1/user/register with body:
+         { encryptedData, encryptedAESKey, iv }
+       Plus headers on signed routes: x-api-timestamp, x-api-nonce
+    k) Optional: voice WAV as multipart (req.file) for voice enrollment on server.
+
+  SERVER user.controller.js registerUser:
+    l) hybridDecrypt(req.body) → plaintext JSON in server memory ONLY.
+    m) hashIdentifier(phone), hashIdentifier(email) → phoneHash, emailHash stored.
+    n) encryptDriveIdentity({ fullName, phoneNumber, email, registeredAt }, userId)
+    o) uploadToDrive(refreshToken, encryptedEnvelope) → Google fileId
+    p) User.create({ phoneHash, emailHash, salt, oauth encrypted, driveFiles })
+    q) enrollFaceDataInBackground(userId, faceId, salt):
+         For each embedding in faceId:
+           bits = embeddingToBits(face)
+           registrationData = registerBiometricFromBits(bits, salt)
+           push to faceData[]
+         User.faceData updated in MongoDB
+
+  WHAT IS STORED AFTER REGISTER:
+    - MongoDB: BCH templates in faceData[], salt, hashes, Drive file pointer, encrypted OAuth token.
+    - Google Drive: AES-GCM JSON envelope { v:2, encrypted, iv, tag } containing PII.
+    - Client: may keep local BCH registration in localStorage for faceVerify demo paths.
+
+
+2.3 LOGIN / VERIFY SCAN (2 FRAMES)
+----------------------------------
+Routes: /user/face-verify, /user/login flow, consent flows use Scan with fewer frames.
+
+Typical login (UserLogin.jsx):
+  1. User enters phone.
+  2. Navigate to scan route (2 frames) or faceVerify.jsx (2 frames).
+  3. Collect 2 × ArcFace embeddings → faceId array.
+  4. hybridEncrypt({ phoneNumber, faceId, purpose? })
+  5. POST /api/v1/user/login
+
+  SERVER:
+  6. hybridDecrypt → phoneHash lookup → User with faceData[]
+  7. verifyFace(): for each live embedding, embeddingToBits → verifyBiometricFromBits
+     against stored templates; need minMatches (e.g. 2) hashMatch=true
+  8. Issue JWT cookie / session — no PII returned from Mongo; may call getIdentity for profile
+
+
+2.4 IN-PERSON DATA SHARE (EMPLOYEE + USER FACE)
+-----------------------------------------------
+EmployeeDashboard.jsx — "User Data Sharing"
+
+  Step 1 — Employee face:
+    POST /company/employees/verify-face (encrypted faceId) — employee must match.
+
+  Step 2 — Form: user phone, requestedFields[], fieldPurposes, validity, DPDP notice text.
+
+  Step 3 — User reads DPDP notice modal, proceeds to scan.
+
+  Step 4 — User scan (2 frames) → faceId returned via react-router state.
+
+  Step 5 — Auto POST /consent/share-data (encrypted):
+    { phoneNumber, faceId, validity, requestedFields, fieldPurposes, ... }
+
+  SERVER consent.controller.js shareData:
+    - hybridDecrypt body
+    - Find user by phoneHash
+    - verifyFace(user, faceId, minMatches=3)
+    - Consent.create({ status: "ACTIVE", sharedFields, ... })
+    - ConsentAudit NOTICE_SENT + CONSENT_GIVEN
+    - getIdentity(user) → plaintext name/email IN SERVER MEMORY for email only
+    - sendConsentGrantedEmail to user
+    - Response: consent object (no full PII dump to employee in this handler alone)
+
+
+2.5 REMOTE CONSENT (REQUEST → APPROVE)
+--------------------------------------
+  A) Employee POST /consent/request-consent (phone, fields — not encrypted in simple body)
+     → PENDING consent + email to user with approval link.
+
+  B) User opens /user/approve-consent?consentId=...
+     → face scan → POST /consent/approve-consent/:id { faceId, approve: true } encrypted
+     → verifyFace → status ACTIVE.
+
+
+2.6 BCH (FUZZY EXTRACTOR) — WHAT IT DOES
+----------------------------------------
+Files:
+  - data-sharing-server-main/api/utils/bch_integration.js
+  - data-sharing-server-main/api/utils/bch_codec.wasm
+  - data-sharing-client-main/src/bch_integration.js + public/bch_codec.wasm
+
+Pipeline (server-side enrollment):
+  embedding (512 floats) → embeddingToBits → bit string
+  → registerBiometricFromBits(bits, salt)
+  → stores { helperData, ecc, hashOfSecret, ... } per frame in user.faceData[i]
+
+Pipeline (verification):
+  live embedding → bits → verifyBiometricFromBits(bits, storedTemplate, salt)
+  → { hashMatch: true/false, ... }
+
+Raw face photos are NOT sent to MongoDB. Only irreversible/helper templates.
+
+
+2.7 VOICE (OPTIONAL)
+--------------------
+  - Registration may upload WAV → server voiceAuth.service.js (ONNX WavLM, AASIST, RawNet2)
+  - ECAPA may run via Python FastAPI ecapa/ecapa_server.py
+  - Fused embedding → BCH storage in user.voiceData
+  - Login demos (Amazon/chat) may attach voiceFile with encrypted login payload
+
+
+================================================================================
+PART 3 — ENCRYPTION LAYERS (WHAT IS ENCRYPTED, WITH WHAT KEY)
+================================================================================
+
+3.1 HYBRID RSA + AES (CLIENT ↔ SERVER API PAYLOADS)
+---------------------------------------------------
+Used on: register, login, share-data, approve/revoke/reject consent, erase-data, etc.
+
+CLIENT (data-sharing-client-main/src/crypto/aes.js):
+  1. Generate random AES-256-GCM key + 12-byte IV.
+  2. JSON.stringify(payload) → AES-GCM encrypt → encryptedData (base64).
+  3. Export AES key → RSA-OAEP encrypt with SERVER public key → encryptedAESKey.
+  4. POST { encryptedData, encryptedAESKey, iv }  (+ authTag if separate)
+
+SERVER (data-sharing-server-main/api/utils/crypto/aes.js):
+  1. RSA privateDecrypt(encryptedAESKey) → AES key bytes.
+  2. AES-GCM decrypt encryptedData → UTF-8 JSON string.
+  3. JSON.parse → { phoneNumber, faceId, ... } in server RAM.
+
+In transit: TLS 1.3 (HTTPS) + application-layer hybrid encryption.
+Plaintext exists on server only inside the request handler, then discarded.
+
+
+3.2 GOOGLE DRIVE IDENTITY BLOB (PII AT REST)
+--------------------------------------------
+SERVER (drive.service.js):
+
+  encryptDriveIdentity(identityObject, userId):
+    key = HKDF-SHA256(DRIVE_MASTER_KEY, salt=userId, info="byosync-drive-identity-v1")
+    AES-256-GCM encrypt JSON.stringify({ fullName, phoneNumber, email, ... })
+    envelope = { v: 2, encrypted: hex, iv: hex, tag: hex }
+    uploadToDrive(refreshToken, envelope) → fileId stored in user.driveFiles
+
+  getIdentity(user):
+    refreshToken = decryptSecret(user.oauth.refreshTokenEncrypted)  // separate AES envelope
+    download JSON from Google Drive by fileId
+    decryptDriveIdentity(envelope, user._id) → PLAINTEXT OBJECT in server RAM
+    return { fullName, phoneNumber, email, ... }
+
+  WHO CAN TRIGGER DECRYPT:
+    - Mailers (consent granted, grievance, breach notification)
+    - Company consent list API (buildSharedUserData for ACTIVE consents)
+    - User right-to-access, correct-data flows
+    - NOT sent to browser as Drive ciphertext for company; server decrypts server-side.
+
+
+3.3 OAUTH REFRESH TOKEN (SERVER MongoDB)
+-----------------------------------------
+  encryptSecret(refreshToken) → { encrypted, iv, tag } in user.oauth.*
+  Never returned to client in API responses (sanitizeUser strips oauth).
+
+
+3.4 IDENTIFIER HASHING (MongoDB lookup)
+---------------------------------------
+  identityHash.js: phoneNumber/email → phoneHash, emailHash
+  Allows lookup without storing plaintext phone/email in Mongo.
+
+
+================================================================================
+PART 4 — USER → COMPANY DATA FLOW (PLAINTEXT SHARING PATH)
+================================================================================
+
+4.1 PREREQUISITES
+-----------------
+  - User registered (faceData + Drive identity file).
+  - Company + Employee exist in MongoDB.
+  - Valid consent: status ACTIVE, validUntil > now, sharedFields[] populated.
+
+
+4.2 FLOW A — IN-PERSON (IMMEDIATE ACTIVE CONSENT)
+-------------------------------------------------
+  [User device]                    [ByoSync API]                 [MongoDB]        [Google Drive]
+       |                                |                            |                  |
+       | Employee verifies own face     |                            |                  |
+       |------------------------------->| verify employee faceData   |                  |
+       |                                |                            |                  |
+       | User face scan (2 frames)      |                            |                  |
+       | embeddings in memory           |                            |                  |
+       | hybridEncrypt(share payload)   |                            |                  |
+       |------------------------------->| hybridDecrypt              |                  |
+       |                                | verifyFace(user, faceId)   | read faceData    |
+       |                                | Consent.create ACTIVE      | write consent    |
+       |                                | getIdentity(user)          |                  |--read file-->
+       |                                | decrypt PII in RAM         |                  |<--encrypted--|
+       |                                | send email (name, email)   |                  |
+       |<-------------------------------| 200 consent id             |                  |
+
+  Employee/company viewing shared data (later):
+       | Company dashboard loads consents                             |
+       |------------------------------->| GET company consents API   |
+       |                                | For each ACTIVE consent:   |
+       |                                |   getIdentity(user)        |                  |--fetch-->
+       |                                |   decrypt Drive blob       |                  |
+       |                                |   buildSharedUserData(     |                  |
+       |                                |     identity, sharedFields)|                  |
+       |                                |   attach sharedData{}      |                  |
+       |<-------------------------------| JSON with allowed fields   |                  |
+
+  PLAINTEXT TRAVEL:
+    - User → Company: ONLY fields listed in consent.sharedFields, only while ACTIVE.
+    - Transport: HTTPS JSON response (not hybrid-wrapped for typical GET list responses).
+    - Decryption of Drive happens ON SERVER; company never receives Drive OAuth token.
+
+
+4.3 FLOW B — REMOTE REQUEST
+---------------------------
+  1. Employee POST /consent/request-consent (phone, fields, purposes).
+  2. Server: PENDING consent, email user (uses getIdentity for email address).
+  3. User approves with face → ACTIVE.
+  4. Same company fetch path as 4.2 for sharedData.
+
+
+4.4 WHAT company.controller buildSharedUserData DOES
+----------------------------------------------------
+  - Input: decrypted identity object + sharedFields array from consent.
+  - Output: subset object e.g. { fullName, email, dob, ... } only if field allowed.
+  - Sensitive fields may be blocklisted at consent layer.
+
+
+4.5 REVOCATION
+--------------
+  User face scan → POST revoke-consent → status REVOKED
+  → company API stops returning sharedData for that consent (not ACTIVE).
+
+
+================================================================================
+PART 5 — byosync_web-main (MARKETING SITE) vs PRODUCTION
+================================================================================
+
+5.1 byosync_web-main\byosync_web-main
+-------------------------------------
+  - app/page.tsx — landing sections, waitlist, embedded system-flow demo.
+  - components/landing/system-flow-demo.tsx — ANIMATED storytelling:
+      * On-device fuzzy extractor (helper_data, k2)
+      * Vault direct upload (conceptual UMK / DEK model)
+      * ByoSync DB holds auth primitives + consent ledger
+    This is PRODUCT ARCHITECTURE EDUCATION. Implementation in production uses:
+      ArcFace + BCH + Drive AES-GCM + hybrid RSA payloads (documented above),
+      not necessarily every Secure Enclave / UMK detail shown in the demo.
+
+  - Navbar Demo button → https://datasharing.byosync.in/ (data-sharing-client-main).
+
+5.2 NO biometric processing in byosync_web-main
+-----------------------------------------------
+  - No ONNX, no MediaPipe, no /api/v1/user/login in this Next.js repo.
+  - Waitlist only: POST /api/waitlist on Vercel (Upstash Redis) — unrelated to sharing.
+
+
+================================================================================
+PART 6 — END-TO-END SEQUENCE (ASCII)
+================================================================================
+
+REGISTRATION
+------------
+  [Browser Camera] → ArcFace ONNX → 50 embeddings
+        → hybridEncrypt → [HTTPS] → [Server RSA decrypt AES] → plaintext JSON
+        → hash phone/email → encrypt PII → [Google Drive ciphertext]
+        → BCH register each embedding → [MongoDB faceData]
+
+LOGIN
+-----
+  [Browser 2 frames] → embeddings → hybridEncrypt → [Server] → BCH verify → JWT
+
+SHARE TO COMPANY
+----------------
+  [Employee + User face] → hybridEncrypt share-data → [Server verify face]
+        → [MongoDB Consent ACTIVE]
+        → [Server decrypt Drive for email / later API]
+        → [Company GET consents] → sharedData plaintext subset over HTTPS
+
+DATA NEVER IN MONGODB AS PLAINTEXT PII
+--------------------------------------
+  fullName, phone, email live in Drive envelope; Mongo holds hash + pointer + BCH.
+
+
+================================================================================
+PART 7 — KEY FILE REFERENCE (ABSOLUTE PATHS)
+================================================================================
+
+MARKETING
+  C:\Users\khatr\Downloads\backend_work_04\byosync_web-main\byosync_web-main\components\landing\system-flow-demo.tsx
+  C:\Users\khatr\Downloads\backend_work_04\byosync_web-main\byosync_web-main\components\landing\navbar.tsx
+
+CLIENT — BIOMETRIC + ENCRYPT
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-client-main\src\pages\Scan.jsx
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-client-main\src\pages\faceVerify.jsx
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-client-main\src\services\faceRecognition.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-client-main\src\services\liveness.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-client-main\src\crypto\aes.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-client-main\src\pages\UserRegister.jsx
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-client-main\src\pages\EmployeeDashboard.jsx
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-client-main\src\lib\api.js
+
+SERVER — VERIFY + DRIVE + CONSENT
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-server-main\api\controllers\user.controller.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-server-main\api\controllers\consent.controller.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-server-main\api\controllers\company.controller.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-server-main\api\services\drive.service.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-server-main\api\utils\bch_integration.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-server-main\api\utils\crypto\aes.js
+  C:\Users\khatr\Downloads\backend_work_04\data-sharing-server-main\api\utils\crypto\identityHash.js
+
+
+================================================================================
+PART 8 — SECURITY SUMMARY TABLE
+================================================================================
+
+| Data type              | At rest                         | In transit              | Who decrypts        |
+|------------------------|----------------------------------|-------------------------|---------------------|
+| Face photo             | Not stored                       | Not sent                | N/A                 |
+| Face embedding         | Ephemeral in browser             | Inside hybrid ciphertext| Server for BCH      |
+| BCH template           | MongoDB faceData                 | N/A                     | Server verify only  |
+| PII (name, phone, etc.)| Drive AES-GCM envelope           | TLS; register encrypted | Server getIdentity  |
+| OAuth refresh          | Mongo AES-GCM                    | TLS                     | Server only         |
+| Consent metadata       | Mongo plaintext fields list      | TLS                     | N/A                 |
+| Shared fields to co.   | N/A                              | TLS JSON response       | Server filtered     |
+
+================================================================================
+END OF DOCUMENT
+================================================================================
