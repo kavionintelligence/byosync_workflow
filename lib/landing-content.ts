@@ -2,7 +2,7 @@
 
 export const LANDING_HERO = {
   eyebrow: "New Trust stack · Early access",
-  headline: "One integration.\nThe full trust stack.",
+  headline: "One AI integration.\nThe full trust stack.",
   subline:
     "ByoSync helps companies find risky data flows, reduce user-data custody, and prove that a real human approved every sensitive action.",
   supporting: "UPI made money movement instant. ByoSync makes human trust instant.",

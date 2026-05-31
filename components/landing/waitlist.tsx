@@ -20,7 +20,7 @@ import { ScanPulse } from "@/components/landing/shared/scan-pulse";
 import { DEMO } from "@/lib/landing-demo-theme";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { WaveBackground } from "./WaveBackground";
+import { CircuitBackground } from "./CircuitBackground";
 import { LANDING_FINAL_CTA } from "@/lib/landing-content";
 
 export const WaitlistSection = () => {
@@ -84,7 +84,7 @@ export const WaitlistSection = () => {
       className="relative overflow-x-clip px-4 py-20 sm:px-6 sm:py-28 md:py-32"
       style={{ background: 'transparent' }}
     >
-      <WaveBackground />
+      <CircuitBackground pulseCount={40} intensity={0.85} />
 
       <div className="relative z-10 mx-auto max-w-7xl">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">

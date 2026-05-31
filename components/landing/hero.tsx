@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { ArrowRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { WaveBackground } from "./WaveBackground";
+import { CircuitBackground } from "./CircuitBackground";
 import { ScanPulse } from "@/components/landing/shared/scan-pulse";
 import { LANDING_HERO } from "@/lib/landing-content";
 import { DEMO } from "@/lib/landing-demo-theme";
@@ -91,7 +91,7 @@ export const Hero = () => {
       style={{ background: "transparent" }}
       aria-labelledby="hero-heading"
     >
-      <WaveBackground />
+      <CircuitBackground pulseCount={56} />
 
       {!prefersReduced && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
