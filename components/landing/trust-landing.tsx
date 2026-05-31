@@ -16,7 +16,6 @@ import {
   LANDING_BEFORE_AFTER,
   LANDING_HOW_IT_WORKS,
   LANDING_PROBLEM,
-  LANDING_PROOF,
 } from "@/lib/landing-content";
 import { GlowCard } from "@/components/landing/ui/glow-card";
 import { STEP_COLORS } from "@/lib/landing-demo-theme";
@@ -272,33 +271,4 @@ function LANDING_AFTER_LIST() {
       {item}
     </li>
   ));
-}
-
-export function ProofStripSection() {
-  return (
-    <section id="traction" className="relative overflow-x-clip bg-white py-14 sm:py-16">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="rounded-2xl border border-blue-100 bg-linear-to-br from-blue-50 to-white p-8 shadow-sm sm:p-10"
-        >
-          <p className="mb-8 text-center text-xs font-semibold uppercase tracking-widest text-blue-500">
-            {LANDING_PROOF.headline}
-          </p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {LANDING_PROOF.stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <p className="text-lg font-bold tabular-nums text-blue-700 sm:text-xl">{stat.value}</p>
-                <p className="mt-1 text-xs font-semibold text-blue-950">{stat.label}</p>
-                <p className="text-[10px] text-blue-500">{stat.sub}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-8 text-center text-xs text-blue-600/80">{LANDING_PROOF.note}</p>
-        </motion.div>
-      </div>
-    </section>
-  );
 }

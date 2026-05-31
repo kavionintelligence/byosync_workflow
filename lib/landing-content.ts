@@ -143,19 +143,6 @@ export const LANDING_BEFORE_AFTER = {
   ],
 };
 
-export const LANDING_PROOF = {
-  headline: "Traction",
-  stats: [
-    { label: "IIT Mandi iHub", value: "SISFS ₹20L", sub: "Grant" },
-    { label: "ISB IVY", value: "Cohort 4", sub: "Accelerator" },
-    { label: "Indian Patent", value: "Filed Aug 2025", sub: "Pending" },
-    { label: "Users Tested", value: "4,000+", sub: "Beta" },
-    { label: "FAR", value: "<0.001%", sub: "Liveness" },
-    { label: "Flow Latency", value: "<4s", sub: "End-to-end" },
-  ],
-  note: "Pilot/prototype-stage metrics, continuing validation in live deployments.",
-};
-
 export const LANDING_FINAL_CTA = {
   headline: "Build trust into the workflow,\nnot after the audit.",
   subline:

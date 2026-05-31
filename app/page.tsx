@@ -5,7 +5,6 @@ import { SolutionStackSection } from "@/components/landing/solution-stack";
 import {
   BeforeAfterSection,
   ProblemSection,
-  ProofStripSection,
   TrustWorkflowSection,
 } from "@/components/landing/trust-landing";
 import { LANDING_FINAL_CTA } from "@/lib/landing-content";
@@ -22,7 +21,6 @@ export default function LandingPage() {
         <SolutionStackSection />
         <TrustWorkflowSection />
         <BeforeAfterSection />
-        <ProofStripSection />
       </main>
 
       <div id="waitlist" className="scroll-mt-24 md:scroll-mt-28">
