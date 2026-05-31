@@ -42,9 +42,10 @@ export const LANDING_PROBLEM = {
 };
 
 export const LANDING_SOLUTION = {
-  headline: "One integration. The full trust stack.",
+  headline: "Five layers. One AI trust runtime.",
   subline:
-    "ByoSync reduces data custody and proves that a real human — not an AI — approved the exact action, purpose, and data access.",
+    "From AI flow scan and vault tokenization to live approval, proof tokens, and compliance evidence — five runtime layers with SDK snippets, encryption specs, and sample payloads.",
+  layerHint: "Click any layer to see the data format, encryption, and SDK",
   layers: [
     {
       id: 1,

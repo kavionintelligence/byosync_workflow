@@ -251,7 +251,7 @@ export function SolutionStackSection() {
             {LANDING_SOLUTION.headline}
           </h2>
           <p className="mx-auto max-w-2xl text-base leading-relaxed text-blue-800 sm:text-lg">{LANDING_SOLUTION.subline}</p>
-          <p className="mt-3 text-xs text-blue-500">Click any layer to see the data format, encryption, and SDK</p>
+          <p className="mt-3 text-xs text-blue-500">{LANDING_SOLUTION.layerHint}</p>
         </motion.div>
 
         <motion.div
