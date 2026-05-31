@@ -1,7 +1,7 @@
 /** Copy & structure from byosync-landing (lib/content.ts) — single source for marketing sections */
 
 export const LANDING_HERO = {
-  eyebrow: "Trust Runtime · Early access",
+  eyebrow: "New Trust stack · Early access",
   headline: "One integration.\nThe full trust stack.",
   subline:
     "ByoSync helps companies find risky data flows, reduce user-data custody, and prove that a real human approved every sensitive action.",
