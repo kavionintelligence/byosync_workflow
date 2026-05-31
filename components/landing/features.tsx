@@ -4,9 +4,9 @@ import { ShieldCheck, Smartphone, Cpu } from 'lucide-react';
 import React from "react";
 
 const FEATURE_DATA = [
-  { icon: <ShieldCheck />, title: "Privacy First", desc: "Zero-data-sharing architecture." },
-  { icon: <Smartphone />, title: "Hardware Free", desc: "Runs on any smartphone OS." },
-  { icon: <Cpu />, title: "OS Layer", desc: "Foundational trust layer integration." },
+  { icon: <ShieldCheck />, title: "Vault + tokens", desc: "Private vault · tokenized access · less raw PII at partners." },
+  { icon: <Smartphone />, title: "Live human approval", desc: "Face + voice + device-bound intent — not a checkbox." },
+  { icon: <Cpu />, title: "Proof + revoke", desc: "Purpose-bound proof tokens, webhooks, and audit evidence." },
 ];
 
 export const Features = () => {
@@ -23,7 +23,7 @@ export const Features = () => {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="mb-0 text-center text-[10px] font-mono uppercase tracking-[0.25em] text-blue-500/80 sm:text-xs sm:tracking-[0.3em]"
         >
-          Foundational Trust Layer for Digital Bharat
+          Foundational trust stack for digital Bharat
         </motion.p>
       </div>
 

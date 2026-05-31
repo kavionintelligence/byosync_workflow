@@ -9,8 +9,10 @@ const ZOOM_MAX = 1.55;
 const ZOOM_STEP = 1.14;
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   SystemFlowDemo — embedded on the landing page.
-   Full dark band (navy + cyan) so panels stay opaque/readable; scoped under #byosync-sf.
+   SystemFlowDemo — interactive workflow (landing + /system-flow).
+   Canonical product model: byosync_updated_vault_native_flow.md
+   Technical enclave/lineage/A2A: BYOSYNC_FLOW_V2 + V3 + A2A_WORKED_WORKFLOWS
+   Each SCENARIOS step documents: route · data state (NONE|LOCAL|CIPHER|META|…) · action
 ───────────────────────────────────────────────────────────────────────────── */
 const SF_CSS = `
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap");
@@ -690,7 +692,7 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
     const scene: SVGSVGElement = sceneEl;
 
     /* ── state ── */
-    let currentScenario = "vault_inception";
+    let currentScenario = "partner_setup";
     let currentStep = 0;
     let playing = false;
     let playTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1870,26 +1872,107 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
     /* ── scenario data ── */
     type Step = { label:string; narration:string; side:{ num:string; title:string; desc:string; crypto:string; resp:{ tags:string[]; text:string } }; action:(done:()=>void)=>void };
     const SCENARIOS: Record<string, Step[]> = {
+      /* Canonical product model: byosync_updated_vault_native_flow.md
+         Invariants: partner has no raw PII DB; vault-native storage; parent blind;
+         boolean default; employee face for view; lineage for A→B; revoke kills tokens.
+         Data states: NONE | LOCAL | CIPHER | META | TEE-PLAIN | VIEW | SESSION-PLAIN | TOKEN */
+
+      /* ── 00 · Partner setup (vault-native § Scenario 00) ─────────────── */
+      partner_setup: [
+        { label:"Partner signs up — org profile only", narration:"A startup or MSME signs up to use ByoSync as its data layer instead of building a raw customer PII database, consent stack, and audit system from scratch.",
+          side:{ num:"01 / 08", title:"Partner onboarding · META only",
+            desc:"Partner provides business profile and contact. <strong>No user PII</strong> exists yet. ByoSync is positioned as managed compliance-ready infrastructure — <strong>not</strong> a registered Consent Manager.",
+            crypto:"POST /v1/partner/register\n{ org_name, contact, jurisdiction }\n// Partner DB: org_id, api_keys — no customer PII tables",
+            resp:{ tags:["dpdp"], text:"Partner remains accountable for business purpose; ByoSync supplies vault, consent-proof, access control, and audit infrastructure." } },
+          action:(done)=>{ renderDesktopScene("enroll-waiting"); highlightDevice("desktop",1200); setTimeout(done,1000); } },
+
+        { label:"Partner describes product workflow", narration:"The partner defines why data is needed: onboarding, delivery, KYC review, payments. Purpose and field matrix are captured as configuration — not as stored user records.",
+          side:{ num:"02 / 08", title:"Purpose-field matrix",
+            desc:"Each workflow lists <strong>minimum fields</strong> and business purpose. Boolean claims are preferred over raw fields.",
+            crypto:"workflow := {\n  id: 'worker_onboarding',\n  purpose: 'employment verification',\n  fields: ['age_over_18', 'kyc_verified'],\n  default_mode: 'boolean'\n}",
+            resp:{ tags:["dpdp"], text:"DPDP purpose limitation — collect only what the workflow needs." } },
+          action:(done)=>{ highlightDevice("desktop",1400); setTimeout(done,900); } },
+
+        { label:"Virtual data model proposed", narration:"ByoSync proposes a virtual schema: what the partner app will request, never what it will store as plaintext in its own database.",
+          side:{ num:"03 / 08", title:"Virtual schema · no PII DB",
+            desc:"Partner sees logical fields (name, address, KYC) as <strong>vault-backed references</strong>, not columns in partner SQL.",
+            crypto:"// Partner DB after go-live (allowed)\npartner_user_ref, byosync_user_token,\nconsent_status, proof_id, workflow_status\n\n// Partner DB must NOT store by default:\nname, DOB, address, PAN, raw docs, biometrics",
+            resp:{ tags:["soc2"], text:"Reduces partner blast radius — breach of partner app DB does not equal full identity dump." } },
+          action:(done)=>{ highlightDevice("byosync",1200); setTimeout(done,900); } },
+
+        { label:"Employee roles and access policy", narration:"Partner configures which employees may request which fields. Sensitive view requires live employee face verification at access time.",
+          side:{ num:"04 / 08", title:"RBAC + employee face gate",
+            desc:"Roles: onboarding_officer, support_agent, admin. Plaintext view is <strong>high-risk</strong> and role-gated.",
+            crypto:"role_policy := {\n  onboarding_officer: ['boolean', 'view_kyc'],\n  support_agent: ['boolean'],\n  admin: ['config_only']\n}",
+            resp:{ tags:["soc2"], text:"SOC 2 CC6.3 — least privilege. Employee face proof before SESSION-PLAIN view." } },
+          action:(done)=>{ highlightDevice("desktop",1000); highlightDevice("byosync",1000); setTimeout(done,1000); } },
+
+        { label:"Notice and consent templates", narration:"Draft notices and consent copy are generated from the purpose-field matrix. Partner publishes privacy policy; ByoSync renders itemised consent UI via SDK.",
+          side:{ num:"05 / 08", title:"Notice config · META",
+            desc:"Notice version is recorded before any user data is collected.",
+            crypto:"notice_version := '2026-03-v1'\nconsent_template := map(fields → plain_language)",
+            resp:{ tags:["dpdp"], text:"DPDP Rule 3 — itemised notice before collection." } },
+          action:(done)=>{ highlightDevice("byosync",1100); setTimeout(done,800); } },
+
+        { label:"Retention, revocation, and webhook rules", narration:"Retention TTLs, revocation behaviour, and partner webhook endpoints are configured. Revocation must invalidate partner caches and proof references.",
+          side:{ num:"06 / 08", title:"Policy version",
+            desc:"Revocation kills tokens and sessions; partners receive <strong>consent.revoked</strong> and <strong>data.updated</strong> events.",
+            crypto:"policy := { default_ttl, revoke_cascade: true,\n  webhooks: ['consent.revoked','data.updated','deletion_required'] }",
+            resp:{ tags:["dpdp"], text:"Withdrawal as easy as approval; partners must stop processing on revoke." } },
+          action:(done)=>{ highlightDevice("byosync",1200); setTimeout(done,900); } },
+
+        { label:"SDK / API integrated in partner app", narration:"Partner embeds ByoSync SDK in web or mobile app. Product code calls ByoSync for verification and vault access — not a local PII table.",
+          side:{ num:"07 / 08", title:"SDK embedded",
+            desc:"Partner app holds SDK keys and <code>byosync_user_token</code> references only.",
+            crypto:"// Partner integration\nByoSyncSDK.init({ partner_id, environment })\n// No raw PII tables created",
+            resp:{ tags:["soc2"], text:"Centralises encryption, consent proof, and audit — partner builds product logic only." } },
+          action:(done)=>{ renderDesktopScene("requesting"); highlightDevice("desktop",1200); makePacket({ fromKey:"desktop",toKey:"byoRight",label:"SDK live",color:"#34d399",onArrive:()=>done() }); } },
+
+        { label:"Partner data layer ready — no raw PII DB", narration:"Setup complete. The partner runs product workflows on ByoSync infrastructure. Next: Scenario 01 — user onboarding and vault creation.",
+          side:{ num:"08 / 08", title:"Ready for users",
+            desc:"Partner stores <strong>proof_id + status + refs</strong>. User PII will live in encrypted personal vaults only.",
+            crypto:"INVARIANT:\n  Partner DB ≠ customer PII warehouse\n  ByoSync parent = CIPHER + META only\n  User vault = encrypted envelopes",
+            resp:{ tags:["dpdp","soc2"], text:"Spec: byosync_updated_vault_native_flow.md § Scenario 00." } },
+          action:(done)=>{ highlightDevice("desktop",1000); highlightDevice("byosync",1000); setTimeout(done,1200); } },
+      ],
 
       vault_inception: [
-        /* ── v2 TARGET (BYOSYNC_FLOW_V2_ENCLAVE_TARGET.md) ───────────────
-           Parent EC2 = blind relay (ciphertext in, signed result out).
-           Nitro enclave = hybridDecrypt, BCH enroll, PII envelope, KMS wrap.
-           Mongo = phoneHash + KMS-wrapped templates + wrapped OAuth + pointers.
-           Drive = AES-GCM identity blob; DEK per-user, PCR-gated KMS.
+        /* ── 01 · User onboarding + vault (vault-native §01 + v2 enclave) ──
+           Parent EC2 = blind relay. Nitro = hybridDecrypt, BCH, PII envelope, KMS.
         ──────────────────────────────────────────────────────────────────*/
 
+        { label:"User opens partner app — no PII in partner DB", narration:"The user opens the partner's app with ByoSync SDK embedded. The partner has no name, DOB, or documents stored yet — only a session to start onboarding.",
+          side:{ num:"01 / 10", title:"Partner app · vault-native start",
+            desc:"<strong>Partner DB row does not exist yet</strong> for this user. ByoSync will issue <code>byosync_user_token</code> and <code>proof_id</code> after vault creation — not raw PII fields.",
+            crypto:"// Partner DB: (empty for this user)\n// Wire: NONE until SDK call",
+            resp:{ tags:["dpdp"], text:"DPDP Rule 3 — notice before collection. Partner purpose defined in Scenario 00." } },
+          action:(done)=>{ renderPhoneScene("enroll-start"); renderDesktopScene("enroll-waiting"); highlightDevice("phone",1200); setTimeout(done,1000); } },
+
+        { label:"Partner SDK calls ByoSync — purpose + fields", narration:"The partner backend calls ByoSync with partner_id, purpose, and required fields. Request is logged as META only.",
+          side:{ num:"02 / 10", title:"SDK request · META",
+            desc:"ByoSync returns a session to render notice and consent on the user's phone.",
+            crypto:"POST /v1/onboarding/start\n{ partner_id, purpose, fields[], notice_version }\n// Logged: request_id, purpose — no PII",
+            resp:{ tags:["dpdp"], text:"Purpose-bound from the first API call." } },
+          action:(done)=>{ makePacket({ fromKey:"desktop",toKey:"byoRight",label:"Onboard req",color:"#60a5fa",onArrive:()=>{ highlightDevice("byosync",1200); done(); } }); } },
+
+        { label:"User sees notice and consents", narration:"The phone shows the itemised notice and consent screen. User can refuse — nothing is stored.",
+          side:{ num:"03 / 10", title:"Notice + consent · META",
+            desc:"Consent intent is signed on device when the user approves.",
+            crypto:"consent_intent := sign(partner_id, fields, purpose, nonce, ts)",
+            resp:{ tags:["dpdp"], text:"Free, specific, informed, unambiguous consent." } },
+          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Notice",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("consent-prompt"); highlightDevice("phone",1400); done(); } }); } },
+
         { label:"First launch — nothing stored yet",
-          narration:"The user opens ByoSync for the first time. Nothing has been captured, transmitted, or stored. The app presents a clear, itemised notice before any enrollment begins.",
-          side:{ num:"01 / 09", title:"Zero-state start",
-            desc:"ByoSync follows DPDP Rule 3: a plain-language, itemised notice is shown <strong>before</strong> any data is collected. The user can read it, close the app, and nothing happens.",
+          narration:"Enrollment begins. Nothing has been captured, transmitted, or stored beyond consent META. Biometric capture runs next — on device only.",
+          side:{ num:"04 / 10", title:"Zero-state enrollment",
+            desc:"ByoSync follows DPDP Rule 3: plain-language, itemised notice <strong>before</strong> biometrics.",
             crypto:"// State of the world right now\nByoSync DB:         empty\nVaultPointerReg:    empty\nUser's Cloud Vault: empty\nSecureEnclave:      empty\nNetwork traffic:    none",
             resp:{ tags:["dpdp"], text:"DPDP Section 6(1) — free, specific, informed consent required. Rule 3 — itemised notice before collection. No data = no obligation yet." } },
           action:(done)=>{ renderPhoneScene("enroll-start"); renderDesktopScene("enroll-waiting"); highlightDevice("phone",1200); setTimeout(done,1000); } },
 
         { label:"Face + voice enrollment — on-device fuzzy extractor",
           narration:"Multi-modal biometric capture runs entirely on the phone. Face geometry and voice prosody are fed into a fuzzy extractor that produces helper_data and k2. Raw samples zeroed immediately.",
-          side:{ num:"02 / 09", title:"On-device enrollment · helper_data + k2",
+          side:{ num:"05 / 10", title:"On-device enrollment · helper_data + k2",
             desc:"A <strong>fuzzy extractor</strong> produces two outputs: <strong>helper_data</strong> (safe to store publicly — cannot reverse a biometric from it) and <strong>k2</strong> (a key share that only reproduces when the same face + voice is presented again). Raw biometrics are <strong>immediately zeroed</strong>.",
             crypto:"// Fuzzy extractor — two outputs\n(helper_data, k2) :=\n  FuzzyExtract.generate(\n    face_geometry_vector,  // from camera\n    voice_prosody_vector   // from mic\n  )\n\n// Raw inputs gone immediately\nzero(face_geometry_vector)\nzero(voice_prosody_vector)\n\n// Only helper_data and k2 survive on-device",
             resp:{ tags:["dpdp","soc2"], text:"DPDP Rule 6(1)(a) — raw biometric never stored or transmitted. SOC 2 CC6 — biometric captured at minimum-necessary scope. helper_data alone cannot reconstruct the face or voice." } },
@@ -1897,7 +1980,7 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
 
         { label:"Secure Enclave generates random User Master Key",
           narration:"The Secure Enclave generates a cryptographically random UMK. k2 + device hardware key activate the Enclave to produce it. Face does not derive or encrypt the UMK — it only unlocks the device to produce it.",
-          side:{ num:"03 / 09", title:"UMK birth — random, not biometric-derived",
+          side:{ num:"06 / 10", title:"UMK birth · LOCAL · device key registered",
             desc:"<strong>Critical architecture point:</strong> the UMK is a random 256-bit key. Biometrics (via k2) are the <em>activation factor</em> to release it, not the derivation source. Spoofing the face without the hardware device key still cannot release the UMK.",
             crypto:"// Inside Secure Enclave (TEE)\nUMK := SecureRandom.bytes(32)   // pure random\n\n// Wrap with two-factor protection:\nwrapped_UMK := Enclave.wrap(\n  UMK,\n  kdf(k2, device_hw_key)  // biometric + hardware\n)\n\n// Store only the wrapped form; UMK and k2 zeroed\nzero(UMK); zero(k2)",
             resp:{ tags:["soc2","pci"], text:"SOC 2 CC6.1 — hardware-backed key protection. PCI DSS 4.0.1 Req 3.6 — key management lifecycle. Random UMK means biometric compromise alone does not expose vault contents." } },
@@ -1905,7 +1988,7 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
 
         { label:"Hybrid ciphertext → parent relay → Nitro enclave",
           narration:"Registration payload (face embeddings + PII fields) is hybrid-encrypted on the phone. The parent server never decrypts — it forwards the blob over vsock into an attested Nitro enclave.",
-          side:{ num:"04 / 09", title:"Parent is blind · enclave decrypts",
+          side:{ num:"07 / 10", title:"CIPHER → enclave · TEE-PLAIN briefly",
             desc:"<strong>v2 change:</strong> RSA private key lives in KMS, released only to the enclave (PCR-gated). The parent EC2 operator, a memory dump, or a compromised dependency on the relay tier cannot read embeddings or PII.",
             crypto:"// Phone → Parent (TLS)\nPOST /v1/user/register\n{ encryptedData, encryptedAESKey, iv }\n\n// Parent → Enclave (vsock, unchanged ciphertext)\nvsock.send(enroll_op, body)\n\n// Inside Nitro enclave ONLY:\nplain := hybridDecrypt(body)\nphoneHash, emailHash := HMAC(plain.phone, plain.email)\ntemplates := BCH_register(plain.faceId)  // then KMS-wrap\n\n// Parent never sees: plain",
             resp:{ tags:["dpdp","soc2"], text:"Trust boundary: attested enclave. Parent sees ciphertext in, signed result out — never plaintext biometric bits or PII." } },
@@ -1913,7 +1996,7 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
 
         { label:"Enclave builds PII envelope → parent uploads to Drive",
           narration:"Inside the enclave: identity JSON is encrypted with a per-user DEK (KMS-wrapped, PCR-gated). The parent performs the Google HTTPS upload but only handles ciphertext — the enclave never gives it the DEK.",
-          side:{ num:"05 / 09", title:"PII encrypted in enclave · relay to vault",
+          side:{ num:"08 / 10", title:"CIPHER envelope → vault",
             desc:"<strong>v2 removes DRIVE_MASTER_KEY on the parent.</strong> Per-user DEK is wrapped by KMS with RecipientAttestation:PCR0. Optional defense-in-depth: final unwrap also requires a live BCH match.",
             crypto:"// Inside enclave\nidentity := { name, phone, email, registeredAt }\nDEK_user := SecureRandom(32)\nenvelope := AES_GCM(identity, DEK_user)\nwrapped_DEK := KMS.wrap(DEK_user, PCR0=enclave)\n\n// Parent googleProxy (cipher only)\nPUT Drive user_identity.json\n  body: { v:2, encrypted, iv, tag, wrapped_DEK }\n\n// Mongo (from enclave output, all wrapped):\nphoneHash, emailHash, faceData_KMS, oauth_KMS, fileId",
             resp:{ tags:["dpdp","soc2","pci"], text:"Operator cannot decrypt Drive blobs without attested enclave + KMS policy + (optionally) live biometric." } },
@@ -1928,35 +2011,19 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
 
         { label:"Vault inception complete · wrapped stores only",
           narration:"Registration finishes. Mongo holds only hashes, KMS-wrapped BCH templates, wrapped OAuth tokens, and a Drive file pointer. The vault holds the encrypted identity envelope.",
-          side:{ num:"06 / 09", title:"Mongo + vault · no plaintext at rest",
+          side:{ num:"09 / 10", title:"At rest: CIPHER + META only",
             desc:"Neither Mongo nor the parent server ever stored plaintext PII or usable biometric templates. Only the attested enclave briefly held plaintext during the request — then memory was wiped.",
             crypto:"// Mongo (parent writes what enclave returns)\nphoneHash, emailHash\nfaceData[]: KMS-wrapped BCH blobs\noauth: KMS-wrapped refresh token\ndriveFiles: [{ fileId, type:'identity' }]\n\n// Google Drive\n{ v:2, encrypted, iv, tag }  // DEK inside KMS wrap\n\n// Parent invariant\nNEVER: plaintext PII, live embeddings, DEK",
             resp:{ tags:["dpdp","soc2"], text:"Breach of parent EC2 or Mongo dump: ciphertext and hashes only — not enough to impersonate users or read identity." } },
           action:(done)=>{ renderPhoneScene("enroll-complete"); highlightDevice("phone",1200); highlightDevice("vault",1200); highlightDevice("byosync",1200); setTimeout(done,1400); } },
 
-        { label:"Future consent: enclave fetch → filter → encrypt-to-company",
-          narration:"Later, when a company needs data, the parent fetches the Drive ciphertext via googleProxy. The enclave decrypts, filters to consented fields, and re-encrypts to the company's public key — the parent relays ciphertext only.",
-          side:{ num:"07 / 09", title:"Share path (v2) · company decrypts",
-            desc:"See <strong>Scenario 07 — Encrypted field share</strong>. Closes the v1 gap where companies received plain JSON over HTTPS.",
-            crypto:"// Enclave (consent ACTIVE)\nblob := googleProxy.fetch(fileId)  // cipher only\nplain := decryptDrive(blob, DEK_user)  // KMS+PCR\nsubset := filter(plain, consent.sharedFields)\ncipher_co := encrypt(subset, company_pubkey)\nsign := enclave_key.sign(cipher_co)\n\n// Audit (hash-chained)\nentry_n := { event, consentId, ts, prevHash }",
-            resp:{ tags:["dpdp","soc2"], text:"ByoSync operator cannot read shared PII. Company decrypts client-side with its own private key." } },
-          action:(done)=>{ highlightDevice("enclave",1200); setTimeout(()=>{ makePacket({ fromKey:"enclaveBottom",toKey:"vaultTop",label:"Fetch cipher",color:"#60a5fa",onArrive:()=>{ makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"vsock up",color:"#f472b6",onArrive:()=>{ makePacket({ fromKey:"enclaveRight",toKey:"desktop",label:"To company",color:"#34d399",onArrive:()=>done() }); } }); } }); },600); } },
-
-        { label:"v1 vs v2 — why the enclave matters",
-          narration:"Today's production server decrypts in normal Node RAM. v2 moves every sensitive operation into an attested enclave so the 'zero data, not even ByoSync' claim is true for the operator.",
-          side:{ num:"08 / 09", title:"Honest migration story",
-            desc:"<strong>v1 (current):</strong> hybridDecrypt + getIdentity + BCH verify on parent → operator can see everything in RAM.<br/><br/><strong>v2 (target):</strong> parent relays ciphertext; Nitro enclave decrypts; PCR-gated KMS; encrypt-to-company.",
-            crypto:"// ✗ v1 parent (remove)\nplain := hybridDecrypt(req.body)   // in Node RAM\nidentity := decryptDrive(blob)     // DRIVE_MASTER_KEY\nsharedData := plain JSON to company\n\n// ✓ v2 target\nparent.relay(ciphertext) → enclave\nenclave → { signed, cipher_to_company }\nparent NEVER holds plain",
-            resp:{ tags:["dpdp","soc2"], text:"Aligns marketing with production. Migration order: KMS-gate keys → enclave for verify+decrypt → per-user DEK → encrypt-to-company." } },
-          action:(done)=>{ highlightDevice("byosync",1000); highlightDevice("enclave",1000); highlightDevice("vault",1000); setTimeout(done,1400); } },
-
-        { label:"Foundation set → try encrypted field share",
-          narration:"Vault inception is complete. Next: Scenario 01 (boolean proof) or Scenario 07 (encrypted field share) for the full user→company path under v2.",
-          side:{ num:"09 / 09", title:"Ready for consent flows",
-            desc:"Parent = blind relay. Enclave = trust. Vault = encrypted PII. Company = decrypts only what was encrypted for its pubkey.",
-            crypto:"INVARIANT (v2):\n  Parent / Mongo / operator root:\n    ciphertext + hashes only\n  Enclave:\n    brief plaintext, then zeroed\n  Company:\n    decrypts sharedData locally",
-            resp:{ tags:["dpdp","soc2","pci"], text:"Target spec: BYOSYNC_FLOW_V2_ENCLAVE_TARGET.md. Production today: see BYOSYNC_BIOMETRIC_AND_DATA_FLOW.txt (v1)." } },
-          action:(done)=>{ renderPhoneScene("enroll-complete"); highlightDevice("phone",1000); highlightDevice("vault",800); setTimeout(done,1200); } },
+        { label:"Partner receives onboarding proof — no raw PII",
+          narration:"Onboarding completes. The partner receives only tokens and proof references. User PII remains in the encrypted vault; the partner DB stores no name, DOB, or documents.",
+          side:{ num:"10 / 10", title:"Partner output · META only",
+            desc:"<strong>data_storage: vault_only</strong>. Partner app continues with <code>byosync_user_token</code> and <code>proof_id</code> — not a local PII row.",
+            crypto:"// Partner receives (wire + DB)\n{\n  \"byosync_user_token\": \"usr_tok_xxx\",\n  \"consent_id\": \"cns_xxx\",\n  \"kyc_status\": \"verified\",\n  \"proof_id\": \"prf_xxx\",\n  \"data_storage\": \"vault_only\"\n}\n\n// Partner DB must NOT contain: name, DOB, address, docs",
+            resp:{ tags:["dpdp","soc2"], text:"Vault-native § Scenario 01. Next: Scenario 02 boolean proof (default access)." } },
+          action:(done)=>{ renderPhoneScene("enroll-complete"); makePacket({ fromKey:"byoRight",toKey:"desktop",label:"proof_id",color:"#34d399",onArrive:()=>{ renderDesktopScene("enroll-registered"); highlightDevice("desktop",1400); highlightDevice("vault",1000); setTimeout(done,1200); } }); } },
       ],
 
       boolean: [
@@ -1976,50 +2043,67 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
           action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"googleProxy fetch",color:"#60a5fa",onArrive:()=>{ highlightDevice("vault",1200); makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"Cipher ↑",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1200); done(); } }); } }); } },
         { label:"Nitro enclave: decrypt → boolean → sign", narration:"Inside the attested enclave the blob is decrypted, the boolean answer computed, then a signed JWS assertion is produced. Plaintext and DEK are zeroed before the response leaves the enclave.", side:{ num:"08 / 09", title:"Compute in TEE · wipe RAM", desc:"Decryption and computation happen <strong>only inside Nitro</strong>. The parent receives a signed assertion — not field values.", crypto:"// Nitro enclave only\nplain := decryptDrive(blob, DEK_user)\nresult := { age_over_18: true, kyc_verified: true }\nzero(plain); zero(DEK_user)\n\nassertion := JWS_sign({ consent_id, result, ... })\nvsock → parent: assertion\n\naudit.append({ event, prevHash: SHA256(prev) })", resp:{ tags:["dpdp","soc2"], text:"Hash-chained audit. Operator cannot read result fields from server RAM." } },
           action:(done)=>{ highlightDevice("enclave",1600); setTimeout(done,1500); } },
-        { label:"Company receives signed proof", narration:"AcmePay receives a JWS proof — a few hundred bytes. No PII. No documents. The user is verified.", side:{ num:"09 / 09", title:"Proof delivered", desc:"Company stores only the <strong>signed assertion</strong> and the consent_id. <strong>No PII enters the company's database.</strong>", crypto:"{\n  consent_id:  'con_5af23e',\n  assertion: { age_over_18: true, kyc_verified: true },\n  signature:  'eyJhbGc...'\n}\n\n// For field-level PII → Scenario 07 (encrypt-to-company)", resp:{ tags:["dpdp","soc2","pci"], text:"Boolean path: minimal disclosure. Field share uses company pubkey encryption (v2)." } },
+        { label:"Partner receives verified claim — no raw PII", narration:"AcmePay receives a signed JWS verified claim. The partner stores proof_id and booleans only — never DOB, documents, or profile fields in its database.", side:{ num:"09 / 09", title:"META · verified claim (default)", desc:"<strong>Default access mode.</strong> Partner DB: <code>proof_id</code>, <code>claim: age18plus</code>, <code>consent_id</code> — not underlying fields.", crypto:"{\n  \"claim\": \"age18plus\",\n  \"value\": true,\n  \"consent_id\": \"cns_xxx\",\n  \"proof_id\": \"prf_xxx\",\n  \"issued_at\": \"timestamp\",\n  \"expires_at\": \"timestamp\",\n  \"signature\": \"JWS\"\n}\n// Wire: META only · Vault: CIPHER unchanged", resp:{ tags:["dpdp","soc2","pci"], text:"Vault-native § Scenario 02. High-risk view → Scenario 03. OPERATE field → Scenario 07." } },
           action:(done)=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Signed proof ↑",color:"#60a5fa",onArrive:()=>{ highlightDevice("byosync",800); makePacket({ fromKey:"byoRight",toKey:"desktop",label:"JWS out",color:"#60a5fa",onArrive:()=>{ renderDesktopScene("result-boolean"); highlightDevice("desktop",1400); setTimeout(()=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>done() }); },500); } }); } }); } },
       ],
       payment: [
-        { label:"User picks item, proceeds to checkout", narration:"On the partner's e-commerce app, the user picks an item worth ₹2,500. Their card was tokenized at first save — it lives in the vault as a token, not a PAN.", side:{ num:"01 / 10", title:"Checkout begins · no PAN on partner", desc:"The partner has never stored the user's card number. Only <strong>tok_card_4382</strong>. The real PAN sits encrypted in the user's vault.", crypto:"// Partner DB row\nuser_id:       'usr_8a2f'\npayment_token: 'tok_card_4382'\n// No PAN, no CVV — out of CDE.", resp:{ tags:["pci"], text:"PCI DSS 4.0.1 Req 3 — storing tokens not PAN dramatically reduces the partner's Cardholder Data Environment scope." } },
-          action:(done)=>{ renderDesktopScene("payment-checkout"); highlightDevice("desktop",1400); setTimeout(done,1100); } },
-        { label:"Partner sends payment intent to ByoSync", narration:"The partner submits a payment intent and asks ByoSync to obtain the user's strong customer authentication.", side:{ num:"02 / 10", title:"Payment intent created", desc:"ByoSync's role: orchestrate <strong>2FA / SCA</strong> bound to this specific transaction. ByoSync does <strong>not</strong> see the PAN.", crypto:"POST /v1/payment/intent  (mTLS)\n{\n  amount: 250000, currency: 'INR',\n  merchant: 'AcmePay', order_id: '#4421',\n  payment_token: 'tok_card_4382',\n  user: 'usr_8a2f', txn_nonce: 'a7e2...'\n}", resp:{ tags:["pci","soc2"], text:"PCI DSS Req 4 — strong cryptography in transit. PCI DSS Req 8.4 — MFA required for cardholder flows." } },
-          action:(done)=>{ makePacket({ fromKey:"desktop",toKey:"byoRight",label:"Payment intent",color:"#fbbf24",onArrive:()=>{ highlightDevice("byosync",1300); done(); } }); } },
-        { label:"ByoSync pushes 2FA challenge to phone", narration:"ByoSync sends the user's phone a strong customer authentication challenge — bound to the exact transaction.", side:{ num:"03 / 10", title:"SCA challenge dispatched", desc:"Challenge is built with the <strong>exact intent string</strong>: amount, merchant, order, nonce, expiry. This is what the user will sign with face + voice.", crypto:"challenge := {\n  intent_string: 'pay ₹2500 to AcmePay order #4421',\n  nonce: 'a7e2...', expires_at: now + 90s\n}\nPush(user_device, challenge)", resp:{ tags:["pci","dpdp"], text:"PCI DSS Req 8.4.2 — MFA for any non-console access. Eliminates the OTP-scam pattern." } },
-          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"SCA challenge",color:"#fbbf24",onArrive:()=>{ renderPhoneScene("consent-prompt-payment"); highlightDevice("phone",1500); done(); } }); } },
-        { label:"User reviews amount + merchant", narration:"The phone shows the exact amount, the merchant name, the order, the payment token. The user can refuse.", side:{ num:"04 / 10", title:"User confirms intent", desc:"What the user sees is what they're approving. <strong>The amount and merchant are inside the signed intent.</strong>", crypto:"// What the user reads on screen\n• Pay ₹2,500.00  • To: AcmePay\n• Order: #4421   • Card: ending 4382\n• Expires in: 89 seconds", resp:{ tags:["dpdp","pci"], text:"DPDP Section 6(1) — specific, informed. A scammer cannot change the amount without invalidating the signature." } },
-          action:(done)=>{ renderPhoneScene("consent-prompt-payment"); highlightDevice("phone",1200); setTimeout(done,1000); } },
-        { label:"Face + voice authentication runs", narration:"Multi-modal liveness. Anti-deepfake. Anti-clone. Both modalities must independently pass.", side:{ num:"05 / 10", title:"Multi-modal SCA", desc:"Face liveness + Voice anti-spoof. <strong>A deepfake of one modality cannot bypass the other.</strong>", crypto:"face_ok  := faceLiveness(camera, depth, blink)\nvoice_ok := voiceLiveness(mic, passphrase, prosody)\nrequire(face_ok && voice_ok)", resp:{ tags:["pci","soc2"], text:"PCI DSS Req 8.4 — strong MFA. SOC 2 CC6.1 — multiple authentication factors." } },
-          action:(done)=>{ renderPhoneScene("scanning"); highlightDevice("phone",1500); setTimeout(done,1500); } },
-        { label:"Device signs the payment intent", narration:"Live token + Secure Enclave key produce a signature over the exact payment intent.", side:{ num:"06 / 10", title:"Intent-bound signature", desc:"Signature is over the <strong>complete intent string</strong> — amount, merchant, order, nonce, timestamp. Replay impossible.", crypto:"intent := amount || merchant || order_id\n           || payment_token || nonce || ts\nsignature := DeviceKey.sign(intent)\n\nPOST /v1/payment/auth { intent, signature }", resp:{ tags:["pci","soc2"], text:"PCI DSS Req 8.4 + Req 10. Same signature cannot be used for another transaction." } },
-          action:(done)=>{ renderPhoneScene("approved"); highlightDevice("phone",1200); setTimeout(()=>{ makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Signed auth",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",1300); done(); } }); },800); } },
-        { label:"ByoSync issues SCA proof token", narration:"ByoSync verifies the signature and issues a one-time SCA proof token.", side:{ num:"07 / 11", title:"SCA proof minted", desc:"ByoSync proves the human was present and approved. No PAN. No CVV. ByoSync architecturally outside PCI CDE.", crypto:"sca_proof := JWS_sign({\n  txn_nonce, intent_hash, user_id,\n  factors: ['face', 'voice', 'device_key'],\n  verified_at: now\n}, ByoSync_signing_key)", resp:{ tags:["pci","soc2"], text:"ByoSync architecturally outside CDE; only handles authentication evidence." } },
-          action:(done)=>{ highlightDevice("byosync",1500); setTimeout(()=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"SCA proof",color:"#60a5fa",onArrive:()=>{ highlightDevice("desktop",1200); done(); } }); },600); } },
-        { label:"Verified — payment tokens committed to vault", narration:"User is verified. Card, bank, and UPI tokens were tokenized on first save and live encrypted in the user's vault. ByoSync and the partner never see a raw PAN or account number.", side:{ num:"08 / 11", title:"Payment data secured in vault · tokenized", desc:"On first save, raw card/bank/UPI details are <strong>tokenized then encrypted</strong> before entering the vault. ByoSync holds only the vault pointer — never the tokens themselves.", crypto:"// First-time tokenization (done once at card save)\ntok_card := networkTokenize(PAN)          // e.g. Visa Token\ntok_bank := tokenize(IFSC + ACCT_NO)      // VPA token\ntok_upi  := tokenize(UPI_ID)\n\n// Vault stores tokens encrypted\nvault.store({\n  tok_card: AES_enc(tok_card, DEK),\n  tok_bank: AES_enc(tok_bank, DEK),\n  tok_upi:  AES_enc(tok_upi,  DEK),\n  wrapped_DEK: KMS_wrap(DEK, UMK_ref)\n})\n// ByoSync DB: vault_ptr_enc only — no tokens, no PAN", resp:{ tags:["pci","dpdp"], text:"PCI DSS 4.0.1 Req 3 — network tokenization eliminates PAN from partner and ByoSync entirely. DPDP — user owns and controls their financial tokens in their own vault." } },
-          action:(done)=>{ renderPhoneScene("payment-vault"); highlightDevice("phone",1200); setTimeout(()=>{ makePacket({ fromKey:"phone",toKey:"vaultTop",label:"Encrypted tokens",color:"#60a5fa",onArrive:()=>{ highlightDevice("vault",1300); done(); } }); },700); } },
-        { label:"Partner submits to payment processor", narration:"Partner submits the tokenized card + amount + SCA proof to the payment processor.", side:{ num:"09 / 11", title:"Processor captures payment", desc:"Processor receives <strong>tok_card_4382 + amount + SCA proof</strong>. Processor de-tokenizes inside its PCI-CDE environment.", crypto:"POST processor.com/v1/charge\n{\n  payment_token: 'tok_card_4382',\n  amount: 250000, currency: 'INR',\n  sca_proof: '<JWS>'\n}\n→ de-tokenize → Issuer auth → Capture", resp:{ tags:["pci"], text:"The only PCI CDE here is the payment processor's. Partner and ByoSync are out of scope." } },
-          action:(done)=>{ renderDesktopScene("payment-checkout"); highlightDevice("desktop",1300); setTimeout(done,1100); } },
-        { label:"Processor confirms · audit committed", narration:"Payment captured. ByoSync writes the audit entry.", side:{ num:"10 / 11", title:"Confirmation + audit", desc:"Audit log is <strong>append-only, hash-chained, WORM</strong>. Immutable record of every factor used.", crypto:"audit.append({\n  event: 'payment_authorized',\n  user_id: 'usr_8a2f', merchant: 'AcmePay',\n  amount: 250000,\n  factors: ['face', 'voice', 'device_key']\n})", resp:{ tags:["pci","soc2","dpdp"], text:"PCI DSS Req 10 — log and monitor. SOC 2 CC4. DPDP Rule 6(1)(c)+(e) — logs retained 1 year minimum." } },
-          action:(done)=>{ renderDesktopScene("payment-success"); highlightDevice("desktop",1300); makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>done() }); } },
-        { label:"What this is — and isn't", narration:"ByoSync was the proof, not the payment rail. The face authorized a key that signed the intent.", side:{ num:"11 / 11", title:"Honest boundary", desc:"ByoSync is the <strong>SCA layer</strong>, not a payment aggregator. It produces proof of human presence + intent. Payment moves through your existing processor.", crypto:"// ByoSync IS\n• SCA factor provider\n• Intent-binding service\n• Audit evidence emitter\n\n// ByoSync IS NOT\n• Payment aggregator (RBI)\n• Card storage (PCI CDE)", resp:{ tags:["pci","dpdp"], text:"PCI scope on processor; auth scope on ByoSync; commerce on partner. Legally and operationally sustainable." } },
-          action:(done)=>{ highlightDevice("byosync",1200); highlightDevice("desktop",1200); setTimeout(done,1400); } },
+        { label:"User saves card at payment processor", narration:"Card details are captured on the PCI processor's hosted page — not in the partner app and not in ByoSync.",
+          side:{ num:"01 / 08", title:"PAN/CVV · processor CDE only", desc:"ByoSync and partner are <strong>outside the cardholder data environment</strong>.", crypto:"User → Processor hosted fields\n// ByoSync + Partner: not in CDE", resp:{ tags:["pci"], text:"Vault-native §08." } },
+          action:(done)=>{ renderDesktopScene("payment-checkout"); highlightDevice("desktop",1200); setTimeout(done,900); } },
+        { label:"Processor returns token reference", narration:"Processor returns a token ref. Partner stores META only — never PAN.",
+          side:{ num:"02 / 08", title:"TOKEN · META", desc:"Partner DB: <code>processor_token_ref</code>, <code>last4</code> for UI.", crypto:"{ token_ref: 'tok_proc_4382', last4: '4382' }", resp:{ tags:["pci"], text:"Token ref is not PAN at partner." } },
+          action:(done)=>{ makePacket({ fromKey:"desktop",toKey:"byoRight",label:"token_ref",color:"#fbbf24",onArrive:()=>{ highlightDevice("byosync",1000); done(); } }); } },
+        { label:"Checkout intent to ByoSync", narration:"Partner sends amount, merchant, order, token_ref. ByoSync orchestrates face-verified SCA — no instrument on wire.",
+          side:{ num:"03 / 08", title:"Intent · META", desc:"ByoSync binds human presence to this charge.", crypto:"POST /v1/payment/intent\n{ amount, merchant, order_id, token_ref, txn_nonce }", resp:{ tags:["pci","soc2"], text:"TLS + MFA." } },
+          action:(done)=>{ makePacket({ fromKey:"desktop",toKey:"byoRight",label:"Intent",color:"#fbbf24",onArrive:()=>{ highlightDevice("byosync",1300); done(); } }); } },
+        { label:"User reviews on phone", narration:"User sees amount, merchant, card ending. Can refuse.",
+          side:{ num:"04 / 08", title:"Review", desc:"Intent-bound display.", crypto:"UI only · NONE on wire", resp:{ tags:["dpdp"], text:"Informed consent." } },
+          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Review",color:"#fbbf24",onArrive:()=>{ renderPhoneScene("consent-prompt-payment"); highlightDevice("phone",1400); done(); } }); } },
+        { label:"Face + voice SCA", narration:"LOCAL liveness; device signs intent.",
+          side:{ num:"05 / 08", title:"SCA · LOCAL", desc:"No raw biometric transmitted.", crypto:"DeviceKey.sign(intent_string)", resp:{ tags:["pci"], text:"Req 8.4." } },
+          action:(done)=>{ renderPhoneScene("scanning"); highlightDevice("phone",1500); setTimeout(done,1400); } },
+        { label:"Signed intent → ByoSync", narration:"META auth to ByoSync; replay blocked by nonce.",
+          side:{ num:"06 / 08", title:"Signed intent", desc:"Factors: face, voice, device_key.", crypto:"POST /v1/payment/auth", resp:{ tags:["pci"], text:"Intent binding." } },
+          action:(done)=>{ renderPhoneScene("approved"); makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Signed",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",1200); done(); } }); } },
+        { label:"SCA proof JWS to partner", narration:"ByoSync returns SCA proof. Still no PAN.",
+          side:{ num:"07 / 08", title:"SCA proof · META", desc:"Auth evidence only.", crypto:"sca_proof := JWS_sign({ txn_nonce, intent_hash })", resp:{ tags:["pci"], text:"ByoSync ≠ payment rail." } },
+          action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"SCA JWS",color:"#60a5fa",onArrive:()=>{ highlightDevice("desktop",1200); done(); } }); } },
+        { label:"Partner charges processor", narration:"token_ref + amount + sca_proof. Processor de-tokenizes in its CDE.",
+          side:{ num:"08 / 08", title:"Processor CDE", desc:"Only processor touches PAN.", crypto:"POST processor/charge { token_ref, amount, sca_proof }", resp:{ tags:["pci"], text:"Vault-native §08 complete." } },
+          action:(done)=>{ renderDesktopScene("payment-success"); highlightDevice("desktop",1400); makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit",color:"#34d399",onArrive:()=>done() }); } },
       ],
       plaintext: [
-        { label:"Employee requests plaintext view", narration:"An onboarding officer at AcmePay needs to view a user's address proof for a manual KYC dispute.", side:{ num:"01 / 08", title:"Plaintext path · high-risk", desc:"Some workflows genuinely need PII display. This is the <strong>high-risk path</strong>. Many controls layered. Boolean proof is always preferred first.", crypto:"POST /v1/access/plaintext-request\n{\n  user: 'usr_8a2f', fields: ['address_proof'],\n  purpose: 'manual_kyc_review',\n  ticket: 'JIRA-4421', duration: '15m'\n}", resp:{ tags:["dpdp","soc2"], text:"DPDP Rule 6(1)(b) — strict access control. SOC 2 CC6.3 — least-privilege RBAC." } },
+        /* vault-native §03 — SESSION-PLAIN in employee viewer only; no partner DB write */
+        { label:"Employee requests controlled view", narration:"An onboarding officer needs to view address proof. Boolean proof was insufficient — this is the high-risk path. Partner still does not store PII in its database.",
+          side:{ num:"01 / 10", title:"view_token request · META", desc:"Requires employee_id, role, ticket, fields, duration. Boolean is always preferred first.", crypto:"POST /v1/access/view-request\n{ user_token, fields, purpose, ticket, duration: '15m' }", resp:{ tags:["dpdp","soc2"], text:"Purpose-bound access." } },
           action:(done)=>{ renderDesktopScene("requesting"); highlightDevice("desktop",1300); setTimeout(done,900); } },
-        { label:"Employee MFA inside the company", narration:"Before the request even leaves AcmePay, the employee must pass face + device MFA.", side:{ num:"02 / 08", title:"Employee MFA", desc:"Role-based access enforces who can even request plaintext. <strong>Watermark is generated with employee identity</strong> for forensic traceability.", crypto:"role := AccessPolicy.lookup(emp_id)\nrequire(role.canView('address_proof'))\nemp_attestation := EmployeeDevice.signMFA(request)\nwatermark := emp_id || ts || ticket || user_id", resp:{ tags:["soc2","pci"], text:"SOC 2 CC6.3 — RBAC + MFA. PCI DSS Req 8.4 — MFA for sensitive access." } },
-          action:(done)=>{ highlightDevice("desktop",1300); setTimeout(done,1100); } },
-        { label:"Request → ByoSync control plane", narration:"AcmePay's signed request reaches ByoSync. Policy engine evaluates company + employee + role + purpose.", side:{ num:"03 / 08", title:"Request crosses to control plane", desc:"Bundled request: company ID, employee attestation, role, purpose, ticket, fields, duration, access mode.", crypto:"POST /v1/access/plaintext (mTLS)\n{\n  user: 'usr_8a2f', fields: ['address_proof'],\n  emp_attestation: '<signed>',\n  ticket: 'JIRA-4421', duration: '15m',\n  mode: 'view_only_watermarked'\n}", resp:{ tags:["dpdp","soc2"], text:"DPDP — purpose limitation strictly enforced. SOC 2 CC6 — defense in depth." } },
-          action:(done)=>{ makePacket({ fromKey:"desktop",toKey:"byoRight",label:"Plaintext req",color:"#f87171",onArrive:()=>{ highlightDevice("byosync",1300); done(); } }); } },
-        { label:"User receives high-risk prompt", narration:"The phone lights up with a red prompt — 'Priya at AcmePay wants to view your address proof for 15 minutes.'", side:{ num:"04 / 08", title:"High-risk consent prompt", desc:"User sees the <strong>specific employee</strong>, the <strong>ticket</strong>, the <strong>duration</strong>, and that access is <strong>view-only, watermarked</strong>. No download, no clipboard.", crypto:"{\n  type: 'PLAINTEXT_ACCESS', company: 'AcmePay',\n  employee: 'Priya S. · id 4521',\n  fields: ['address_proof'],\n  mode: 'view_only_watermarked', duration: '15m'\n}", resp:{ tags:["dpdp"], text:"DPDP Section 6(1) — informed: the user knows exactly which employee will view, for how long." } },
-          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Plaintext consent",color:"#f87171",onArrive:()=>{ renderPhoneScene("consent-prompt-plaintext"); highlightDevice("phone",1400); done(); } }); } },
-        { label:"User approves · intent bound to employee", narration:"User reads, considers, approves. The signature is bound to Priya specifically.", side:{ num:"05 / 08", title:"Approval bound to employee", desc:"Approval signature contains <strong>the specific employee identity</strong>. Any other employee = signature mismatch = denied.", crypto:"intent := consent_id || emp_id || fields ||\n          ticket || nonce || ts\nsig    := DeviceKey.sign(intent)\n→ Grant bound to emp_id='Priya·4521'", resp:{ tags:["dpdp","soc2"], text:"DPDP — intent binding tied to specific human. SOC 2 — minimum-privilege at finest granularity." } },
-          action:(done)=>{ renderPhoneScene("approved"); highlightDevice("phone",1200); setTimeout(()=>{ makePacket({ fromKey:"phone",toKey:"byoLeft",label:"Approved",color:"#34d399",onArrive:()=>done() }); },700); } },
-        { label:"Vault → enclave → watermarked render", narration:"Encrypted address proof travels to ByoSync. Document is rendered server-side with Priya's watermark, then streamed to her screen.", side:{ num:"06 / 08", title:"Render, not raw plaintext", desc:"Decryption in-memory only. Priya's browser receives a rendered view with watermark baked in, not the underlying file.", crypto:"blob  := Vault.fetch('address_proof')\nDEK   := KMS.unwrap(blob.wrapped_DEK, policy)\nplain := AES_decrypt(blob.data, DEK)\nrendered := overlayWatermark(plain, emp_id+ts)\nstream := SessionEnclave.stream(rendered, ttl=15m)", resp:{ tags:["dpdp","soc2","pci"], text:"<strong>Honest caveat: a phone camera can still photograph any screen. Watermark = forensic trace, not perfect prevention.</strong>" } },
-          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"googleProxy fetch",color:"#60a5fa",onArrive:()=>{ highlightDevice("vault",1000); makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"Cipher ↑",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1200); makePacket({ fromKey:"enclaveRight",toKey:"desktop",label:"Watermarked stream",color:"#f87171",onArrive:()=>{ renderDesktopScene("plaintext-view"); highlightDevice("desktop",1300); done(); } }); } }); } }); } },
-        { label:"Session expires · plaintext wiped", narration:"Fifteen minutes later, the session enclave destroys itself. Plaintext zeroed. DEK zeroed.", side:{ num:"07 / 08", title:"Auto-destroy", desc:"On expiry: <strong>zero plaintext</strong>, <strong>zero DEK</strong>, <strong>terminate session</strong>. Audit entries hash-chained.", crypto:"zero(plaintext); zero(DEK); zero(session_keys)\nSessionEnclave.destroy(session_id)\naudit.append({\n  event: 'plaintext_viewed', emp_id: 'Priya·4521',\n  duration_actual: '14m22s', view_count: 6\n})", resp:{ tags:["dpdp","soc2"], text:"DPDP Rule 6(1)(c)+(e) — logs retained 1 year. SOC 2 CC4 — monitoring." } },
-          action:(done)=>{ renderDesktopScene("session-expired"); highlightDevice("desktop",1300); makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit hash",color:"#34d399",onArrive:()=>done() }); } },
-        { label:"User dashboard updates with view receipt", narration:"User sees on their phone exactly who viewed what, when, and for how long.", side:{ num:"08 / 08", title:"Receipt + transparency", desc:"<strong>Transparency is part of the architecture</strong>, not an afterthought. Every employee at every company, timestamped.", crypto:"// Dashboard entry\n{\n  company: 'AcmePay', employee: 'Priya S.',\n  field: 'address_proof', view_count: 6,\n  duration: '14m22s', ended_at: '18:43 IST'\n}", resp:{ tags:["dpdp"], text:"DPDP Section 11 — right to information about processing. Section 13 — grievance redressal." } },
-          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"View receipt",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("dashboard"); highlightDevice("phone",1300); done(); } }); } },
+        { label:"Role policy check", narration:"ByoSync verifies the employee role may request these fields.",
+          side:{ num:"02 / 10", title:"RBAC · META", desc:"Least privilege — not every employee can view KYC.", crypto:"require(role.canView(fields))", resp:{ tags:["soc2"], text:"CC6.3." } },
+          action:(done)=>{ highlightDevice("byosync",1100); setTimeout(done,800); } },
+        { label:"Employee face + liveness scan", narration:"Before any user data moves, the employee must pass live face verification on their device. Raw employee biometric is not stored.",
+          side:{ num:"03 / 10", title:"Employee face · LOCAL → META", desc:"<strong>Invariant 6:</strong> employee access requires face verification.", crypto:"emp_presence := EmployeeDevice.verifyFace()\n// Wire: META attestation only", resp:{ tags:["soc2","pci"], text:"Live staff presence proof." } },
+          action:(done)=>{ highlightDevice("desktop",1400); setTimeout(done,1100); } },
+        { label:"User consent checked / step-up", narration:"Active user consent or lawful basis verified. User may receive a step-up prompt.",
+          side:{ num:"04 / 10", title:"Consent · META", desc:"Revoked consent blocks the request immediately.", crypto:"consent.status == ACTIVE", resp:{ tags:["dpdp"], text:"§6 informed consent." } },
+          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Consent?",color:"#f87171",onArrive:()=>{ renderPhoneScene("consent-prompt-plaintext"); highlightDevice("phone",1300); done(); } }); } },
+        { label:"Ephemeral view session key", narration:"Short-lived session key registered for the employee endpoint. Private key stays on employee device/browser.",
+          side:{ num:"05 / 10", title:"Session key · TOKEN", desc:"TTL 15m. Revocation kills session mid-flight.", crypto:"view_token := mint(jti, emp_id, fields, ttl)", resp:{ tags:["soc2"], text:"Fail-closed on revoke." } },
+          action:(done)=>{ renderPhoneScene("approved"); highlightDevice("byosync",1000); setTimeout(done,900); } },
+        { label:"Vault ciphertext fetched", narration:"Parent googleProxy fetches encrypted blob. Parent cannot decrypt.",
+          side:{ num:"06 / 10", title:"CIPHER from vault", desc:"Vault unchanged — ciphertext only on wire.", crypto:"blob_cipher := Drive.get(fileId)", resp:{ tags:["dpdp"], text:"Parent blind." } },
+          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"vaultTop",label:"Fetch",color:"#60a5fa",onArrive:()=>{ highlightDevice("vault",1000); makePacket({ fromKey:"vaultTop",toKey:"enclaveBottom",label:"Cipher ↑",color:"#f472b6",onArrive:()=>{ highlightDevice("enclave",1100); done(); } }); } }); } },
+        { label:"Enclave filters fields · TEE-PLAIN briefly", narration:"Inside Nitro: decrypt, keep approved fields only, zero plaintext before re-encrypt.",
+          side:{ num:"07 / 10", title:"TEE-PLAIN · then zeroed", desc:"Operator never sees address plaintext in parent RAM.", crypto:"plain := decrypt(blob)\nsubset := filter(plain, fields)\nzero(plain)", resp:{ tags:["soc2"], text:"Brief TEE only." } },
+          action:(done)=>{ highlightDevice("enclave",1400); setTimeout(done,1200); } },
+        { label:"Re-encrypt to employee session key", narration:"Approved subset encrypted to employee session public key. No server-side plaintext persistence. No partner DB write.",
+          side:{ num:"08 / 10", title:"CIPHER → employee endpoint", desc:"Partner server stores <strong>nothing</strong> — no PII row, no document file.", crypto:"cipher_view := encrypt(subset, emp_session_pubkey)\n// Server: no plaintext at rest", resp:{ tags:["dpdp"], text:"Vault-native SESSION-PLAIN path." } },
+          action:(done)=>{ makePacket({ fromKey:"enclaveRight",toKey:"desktop",label:"view cipher",color:"#f87171",onArrive:()=>{ highlightDevice("desktop",1200); done(); } }); } },
+        { label:"Controlled viewer · SESSION-PLAIN in memory", narration:"Employee controlled viewer decrypts locally. Plaintext exists only in endpoint memory — watermarked, no download, no API export.",
+          side:{ num:"09 / 10", title:"SESSION-PLAIN · VIEW", desc:"Watermark: employee, company, ticket, timestamp. Clipboard disabled; cache-control no-store.", crypto:"subset_plain := decrypt(cipher_view, emp_session_priv)\n// MEMORY ONLY — not partner DB\noverlayWatermark(subset_plain)", resp:{ tags:["dpdp","soc2"], text:"Honest limit: screen photo still possible — watermark aids forensics." } },
+          action:(done)=>{ renderDesktopScene("plaintext-view"); highlightDevice("desktop",1500); setTimeout(done,1200); } },
+        { label:"Session expires · SESSION-PLAIN cleared", narration:"TTL ends or user revokes. Plaintext zeroed in viewer; audit finalized.",
+          side:{ num:"10 / 10", title:"Clear + audit", desc:"Revocation kills active employee sessions.", crypto:"zero(session_plain); audit.append(view_event)", resp:{ tags:["dpdp"], text:"User receipt on phone dashboard." } },
+          action:(done)=>{ renderDesktopScene("session-expired"); makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Receipt",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("dashboard"); highlightDevice("phone",1300); makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Audit",color:"#34d399",onArrive:()=>done() }); } }); } },
       ],
       revoke: [
         { label:"User opens dashboard, sees active consents", narration:"User opens the ByoSync dashboard from any partner app. Every company with active access is listed.", side:{ num:"01 / 08", title:"Dashboard + lineage chain", desc:"All active consents on one screen. Withdrawal must be <strong>as easy as approval</strong> by law (DPDP Section 6(4)).", crypto:"active := ByoSync.list({user: 'usr_8a2f'})\n→ [\n   { company: 'AcmePay',  fields: ['kyc'] },\n   { company: 'NeoBank',  fields: ['address'] },\n   { company: 'ZipCart',  fields: ['age'] }\n]", resp:{ tags:["dpdp"], text:"DPDP Section 6(4) — withdrawal as easy as approval. Section 11 — right to information." } },
@@ -2192,9 +2276,9 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
       /* ── SCENARIO 07: Encrypted field share (v2 · in-person) ─────────── */
       encrypted_share: [
         { label:"Employee verifies face → hybrid ciphertext to enclave",
-          narration:"An employee scans their face; the payload is hybrid-encrypted. The parent relays it to the Nitro enclave for BCH verification — the parent never sees embedding bits.",
-          side:{ num:"01 / 06", title:"Employee gate in enclave",
-            desc:"Same vsock pattern as user login. Templates are KMS-wrapped in Mongo; only the enclave can unwrap them for matching.",
+          narration:"OPERATE field unlock (policy-bound) — not default partner storage. Employee face gate; user consent ACTIVE; company decrypts ciphertext locally — should not land in partner SQL as plaintext rows.",
+          side:{ num:"01 / 06", title:"OPERATE unlock · not PII warehouse",
+            desc:"Ephemeral decrypt at company under consent — <strong>partner DB still holds proof_id/refs only</strong> unless explicit export policy.",
             crypto:"POST /employees/verify-face (hybrid cipher)\nparent → vsock → enclave.verifyFace(emp)\n← { verified: true }",
             resp:{ tags:["soc2"], text:"Privileged actions require biometric proof inside the TEE." } },
           action:(done)=>{ highlightDevice("desktop",1200); makePacket({ fromKey:"desktop",toKey:"byoRight",label:"Emp verify",color:"#fbbf24",onArrive:()=>{ highlightDevice("byosync",1300); done(); } }); } },
@@ -2223,12 +2307,12 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
             resp:{ tags:["dpdp","soc2"], text:"Operator cannot read shared name/phone/email. Subpoena of parent logs yields ciphertext only." } },
           action:(done)=>{ highlightDevice("enclave",1600); setTimeout(()=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"cipher_co ↑",color:"#34d399",onArrive:()=>{ highlightDevice("byosync",800); done(); } }); },600); } },
 
-        { label:"Company decrypts sharedData locally",
-          narration:"AcmePay's backend receives encrypted sharedData + enclave signature. It decrypts client-side and shows only the consented fields in the employee console.",
-          side:{ num:"05 / 06", title:"Company-held private key",
-            desc:"Prerequisite: company registered an RSA public key with ByoSync during onboarding.",
-            crypto:"// Company server\nshared := RSA_decrypt(cipher_co, company_privkey)\n// → { fullName, phone, ... } per consent\n\n// ByoSync never stored this plaintext",
-            resp:{ tags:["dpdp"], text:"Purpose limitation: only fields listed in ACTIVE consent." } },
+        { label:"Company decrypts in memory — no warehouse",
+          narration:"AcmePay decrypts ciphertext in application memory for the active workflow. Data must not be copied into a permanent customer PII table — use controlled viewer or immediate discard per policy.",
+          side:{ num:"05 / 06", title:"Ephemeral decrypt · policy-bound",
+            desc:"Prefer Scenario 03 (SESSION-PLAIN viewer) for display. This path is for integrations that need structured fields under OPERATE consent + TTL.",
+            crypto:"// Company app memory (ephemeral)\nshared := RSA_decrypt(cipher_co, company_privkey)\n// DO NOT: INSERT INTO users_pii (...)\n// DO: use in workflow → discard → audit",
+            resp:{ tags:["dpdp"], text:"Vault-native: partner defines purpose; ByoSync enforces consent + audit." } },
           action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"Encrypted share",color:"#34d399",onArrive:()=>{ renderDesktopScene("result-boolean"); highlightDevice("desktop",1400); done(); } }); } },
 
         { label:"Invariant · operator blindness",
@@ -2376,6 +2460,53 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
             resp:{ tags:["soc2","dpdp","pci"], text:"Recovery flow never transmits UMK in plaintext. ByoSync is not in the personal data path before or after recovery. Zero PII exposed during the entire flow." } },
           action:(done)=>{ renderPhoneScene("enroll-start"); highlightDevice("phone",1400); highlightDevice("vault",1400); setTimeout(done,1600); } },
       ],
+
+      /* ── 06 · Virtual DB (vault-native §06) ─────────────────────────── */
+      virtual_db: [
+        { label:"Partner asks for profile summary", narration:"The partner app calls ByoSync as its data layer — not a local SQL users table with PII columns.",
+          side:{ num:"01 / 05", title:"Virtual read · META", desc:"Returns verified claims, masked previews, status — not raw vault plaintext.", crypto:"GET /v1/profile/summary\n→ { proof_id, claims[], masked_phone, kyc_status }", resp:{ tags:["dpdp"], text:"Partner DB: refs + proofs only." } },
+          action:(done)=>{ renderDesktopScene("result-boolean"); highlightDevice("desktop",1200); setTimeout(done,900); } },
+        { label:"Employee needs a field temporarily", narration:"Full field access uses controlled viewer (Scenario 03) — face scan, view_token, SESSION-PLAIN, no DB write.",
+          side:{ num:"02 / 05", title:"View path · not SQL SELECT", desc:"No <code>SELECT address FROM users</code> in partner DB.", crypto:"// Wrong: partner.users.address\n// Right: view_token → controlled viewer", resp:{ tags:["soc2"], text:"Employee face + consent required." } },
+          action:(done)=>{ highlightDevice("desktop",1000); highlightDevice("byosync",1000); setTimeout(done,1000); } },
+        { label:"Partner updates business state", narration:"Order status, ticket state, claim workflow — partner business data may live in partner DB. Must not include raw PII unless strictly necessary.",
+          side:{ num:"03 / 05", title:"Business META OK", desc:"Separate business records from vault PII.", crypto:"partner.orders.update({ status: 'shipped' })", resp:{ tags:["dpdp"], text:"Purpose limitation on PII vs business ops." } },
+          action:(done)=>{ highlightDevice("desktop",1100); setTimeout(done,800); } },
+        { label:"Data split reference", narration:"Where each class of data lives — use this table when designing integrations.",
+          side:{ num:"04 / 05", title:"Storage map", desc:"PII/documents → vault CIPHER. Consent/audit → ByoSync META. Payment PAN → processor CDE.", crypto:"PII → vault | consent → ByoSync\nbusiness state → partner | PAN → processor", resp:{ tags:["soc2"], text:"Vault-native §06." } },
+          action:(done)=>{ highlightDevice("vault",1000); highlightDevice("byosync",1000); highlightDevice("desktop",1000); setTimeout(done,1200); } },
+        { label:"Partner never builds raw PII warehouse", narration:"ByoSync is the managed compliance-ready data infrastructure layer on top of which the partner builds product logic.",
+          side:{ num:"05 / 05", title:"Positioning", desc:"Not a registered Consent Manager — consent-proof + vault + audit infrastructure.", crypto:"INVARIANT: Partner DB ≠ PII warehouse", resp:{ tags:["dpdp"], text:"byosync_updated_vault_native_flow.md" } },
+          action:(done)=>{ highlightDevice("byosync",1200); setTimeout(done,1000); } },
+      ],
+
+      /* ── 10 · Breach response (vault-native §10) ───────────────────── */
+      breach_response: [
+        { label:"Suspicious access detected", narration:"Anomaly on token reuse, geo velocity, or employee view pattern triggers alert. Affected tokens frozen.",
+          side:{ num:"01 / 08", title:"Alert · META", desc:"Sessions and jtis frozen pending review.", crypto:"alert := { type: 'suspicious_unlock', jti, emp_id }", resp:{ tags:["soc2"], text:"CC7 monitoring." } },
+          action:(done)=>{ highlightDevice("byosync",1400); setTimeout(done,900); } },
+        { label:"Lineage path reconstructed", narration:"Audit + lineage graph shows user → company → employee → ticket → fields accessed.",
+          side:{ num:"02 / 08", title:"Lineage query", desc:"No guessing — machine-readable chain.", crypto:"path := lineage.trace(jti)", resp:{ tags:["dpdp"], text:"Breach evidence." } },
+          action:(done)=>{ highlightDevice("enclave",1000); highlightDevice("byosync",1000); setTimeout(done,1000); } },
+        { label:"Impacted fields identified", narration:"Field-level impact report: which users, which companies, which OPERATE vs VERIFY events.",
+          side:{ num:"03 / 08", title:"Impact · META", desc:"Supports regulator and user notice.", crypto:"impact := { users[], fields[], jtis[] }", resp:{ tags:["dpdp"], text:"Rule 7 breach support." } },
+          action:(done)=>{ highlightDevice("byosync",1200); setTimeout(done,900); } },
+        { label:"Sessions and tokens revoked", narration:"All related jtis marked REVOKED. Active employee views killed.",
+          side:{ num:"04 / 08", title:"Kill · META", desc:"Fail-closed on next unlock.", crypto:"Redis.set(jti, REVOKED)", resp:{ tags:["soc2"], text:"Containment." } },
+          action:(done)=>{ makePacket({ fromKey:"byoBottom",toKey:"enclaveTop",label:"Revoke",color:"#f87171",onArrive:()=>{ highlightDevice("enclave",1100); done(); } }); } },
+        { label:"Partner notified", narration:"Signed incident webhook with affected user_tokens and required actions.",
+          side:{ num:"05 / 08", title:"Partner webhook", desc:"Partner invalidates caches and proof refs.", crypto:"POST partner/webhooks/incident", resp:{ tags:["dpdp"], text:"Partner accountability." } },
+          action:(done)=>{ makePacket({ fromKey:"byoRight",toKey:"desktop",label:"incident",color:"#f87171",onArrive:()=>{ highlightDevice("desktop",1200); done(); } }); } },
+        { label:"User notice support", narration:"Affected-user list exported for partner/user communication. Evidence pack available.",
+          side:{ num:"06 / 08", title:"User notice", desc:"Transparency + grievance support.", crypto:"export_affected_users(incident_id)", resp:{ tags:["dpdp"], text:"§11 right to information." } },
+          action:(done)=>{ makePacket({ fromKey:"byoLeft",toKey:"phone",label:"Notice",color:"#60a5fa",onArrive:()=>{ renderPhoneScene("dashboard"); highlightDevice("phone",1300); done(); } }); } },
+        { label:"Evidence pack for regulator", narration:"Hash-chained audit + lineage export — WORM retained.",
+          side:{ num:"07 / 08", title:"Evidence pack", desc:"Tamper-evident logs.", crypto:"audit.export(incident_id, prevHash_chain)", resp:{ tags:["soc2"], text:"1yr+ retention." } },
+          action:(done)=>{ makePacket({ fromKey:"enclaveTop",toKey:"byoBottom",label:"Export",color:"#34d399",onArrive:()=>done() }); } },
+        { label:"Remediation closed", narration:"Controls updated; closure proof stored. Partner confirms cache invalidation.",
+          side:{ num:"08 / 08", title:"Closure", desc:"Incident lifecycle complete.", crypto:"incident.status := CLOSED", resp:{ tags:["soc2"], text:"Vault-native §10." } },
+          action:(done)=>{ highlightDevice("byosync",1000); highlightDevice("desktop",1000); setTimeout(done,1200); } },
+      ],
     };
 
     /* ── dossier renderer ── */
@@ -2386,8 +2517,36 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
       const scen = SCENARIOS[currentScenario];
       if (!scen) return;
       if (currentStep === 0) {
-        const titles: Record<string,string> = { vault_inception:"Vault inception · v2 enclave", boolean:"Boolean proof (default)", payment:"Face-payment · PCI", plaintext:"Plaintext view (high-risk)", revoke:"Revoke + cascade · v3", lineage_reshare:"Lineage re-share · v3", a2a_agent:"A2A agent-to-agent · worked flows", encrypted_share:"Encrypted field share · v2", data_update:"Vault data update", new_device:"New device recovery" };
-        const descs: Record<string,string> = { vault_inception:"Registration: hybrid cipher → DB → Nitro enclave → vault. Mongo + lineage ledger store wrapped blobs only.", boolean:"Boolean answers in Nitro. Signed JWS to Company A — no field values.", payment:"Face + voice SCA on tokenized payment intent. PAN never on ByoSync.", plaintext:"High-risk: googleProxy fetch → enclave decrypt → watermarked stream.", revoke:"v3 cascade: lineage REVOKED, delegated JWTs dead, webhooks + deletion callbacks, hash-chain audit.", lineage_reshare:"Sanctioned A→B re-share through enclave re-encrypt. Lineage edge + consent #2 for transferee.", a2a_agent:"Six phases (0–6): mandate → KYA card → 3-tier consent → A2A task → runtime unlock → artifact/lineage → revoke + deletion. Shopping + orchestrated §6.", encrypted_share:"In-person share: enclave encrypt-to Company A pubkey.", data_update:"KYC refresh with forward secrecy; cipher to vault.", new_device:"Old device approves · KMS re-wrap." };
+        const titles: Record<string,string> = {
+          partner_setup:"Partner setup · no raw PII DB",
+          vault_inception:"User onboarding + vault",
+          boolean:"Verified claim (default)",
+          plaintext:"Controlled employee view",
+          revoke:"Revoke + token disconnect",
+          lineage_reshare:"Onward share A→B",
+          virtual_db:"Virtual DB pattern",
+          encrypted_share:"OPERATE field unlock",
+          a2a_agent:"A2A · 3 data classes",
+          data_update:"Vault data update",
+          payment:"Payment intent proof",
+          new_device:"New device recovery",
+          breach_response:"Breach + evidence pack",
+        };
+        const descs: Record<string,string> = {
+          partner_setup:"Partner integrates SDK; purpose-field matrix; roles; webhooks. Partner DB holds proof_id and refs only — not name/DOB/docs.",
+          vault_inception:"SDK → notice → consent → enroll in enclave → vault CIPHER. Partner receives proof_id + byosync_user_token (META).",
+          boolean:"Default: CIPHER in enclave → META JWS claim out. Partner never receives DOB or documents.",
+          plaintext:"Employee face → view_token → CIPHER to session key → SESSION-PLAIN in viewer only. No partner DB write.",
+          revoke:"User revokes → jti killed → sessions closed → lineage cascade → partner webhooks.",
+          lineage_reshare:"Company A cannot side-channel to B. Re-share via ByoSync + consent #2 + enclave re-encrypt.",
+          virtual_db:"Partner uses ByoSync as data layer: claims for reads, controlled view for fields, business state in partner DB only.",
+          encrypted_share:"Policy-bound OPERATE unlock: enclave encrypt-to company pubkey — ephemeral decrypt at company, not a PII warehouse.",
+          a2a_agent:"Extension: VERIFY / OPERATE-STANDARD / INTENT tokens; runtime unlock; no raw PII in A2A messages.",
+          data_update:"User re-auth → fresh DEKs → CIPHER direct to vault → data.updated webhook (META).",
+          payment:"PAN at processor CDE only; token_ref + SCA JWS; ByoSync outside card data environment.",
+          new_device:"Step-up + old device approve → CIPHER re-wrap → device registry META.",
+          breach_response:"Freeze → lineage trace → impact → revoke → partner + user notice → evidence export.",
+        };
         c.innerHTML = `<div class="sf-entry"><div class="sf-entry-num">Step 0 · Ready</div><div class="sf-entry-title">${titles[currentScenario]}</div><div class="sf-entry-desc">${descs[currentScenario]}</div></div>`;
         return;
       }
@@ -2411,7 +2570,7 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
       if (totalEl) totalEl.textContent = String(total);
       if (fill)    fill.style.width    = total===0 ? "0%" : Math.min(100,(currentStep/total)*100)+"%";
       if (narr) {
-        if (currentStep===0)     narr.innerHTML = "Choose a scenario above and press <strong>Play</strong>. Target v3 (on v2 enclave): Consent Manager rail with lineage ledger, A→B re-share, Google A2A + KYA, cascade revoke, and runtime fail-closed tokens. Spec: BYOSYNC_FLOW_V3_LINEAGE_A2A_COMPLIANCE.md.";
+        if (currentStep===0)     narr.innerHTML = "Choose a scenario and press <strong>Play</strong>. Vault-native model: partners build on ByoSync instead of a raw PII database. Data states: <strong>NONE · LOCAL · CIPHER · META · TEE-PLAIN · VIEW · SESSION-PLAIN · TOKEN</strong>. Spec: byosync_updated_vault_native_flow.md.";
         else if (currentStep > total) narr.innerHTML = "Flow complete. Press <strong>Reset</strong> to restart, or switch scenarios above.";
         else narr.textContent = (SCENARIOS[currentScenario]||[])[currentStep-1]?.narration || "";
       }
@@ -2582,12 +2741,12 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
         </div>
       ) : null}
       <div className="sf-header">
-        <p className="sf-eyebrow">Target architecture · v3 · lineage + A2A + compliance</p>
+        <p className="sf-eyebrow">Vault-native data infrastructure · v2 enclave + v3 lineage + A2A</p>
         <h2 className="sf-h2">
           See exactly how <span>trust moves</span><br />through ByoSync.
         </h2>
         <p className="sf-subtitle">
-          v3 extends the v2 enclave stack: ByoSync as Consent Manager (lineage ledger, hash-chain audit), sanctioned Company A→B re-share, Google A2A agent overlay with KYA credentials, and cascade revoke with deletion callbacks. Decrypt only in Nitro — between DB and vault.
+          Partners do not build a raw customer PII database. User data lives in encrypted vaults; partners receive <strong>verified claims</strong>, <strong>purpose-bound tokens</strong>, or <strong>controlled employee views</strong> (SESSION-PLAIN — never stored in partner DB). Parent plane: CIPHER + META only. Decrypt only in Nitro. Spec: byosync_updated_vault_native_flow.md.
         </p>
         {/* Legend */}
         <div className="sf-legend">
@@ -2621,55 +2780,70 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
         <button id="sf-nav-left"  className="sf-nav-arrow sf-nav-left"  aria-label="Scroll scenarios left"  data-hidden="true">‹</button>
         <button id="sf-nav-right" className="sf-nav-arrow sf-nav-right" aria-label="Scroll scenarios right">›</button>
         <nav id="sf-scenarios-nav" className="sf-scenarios">
-          <button className="sf-tab sf-active" data-scenario="vault_inception">
-            <div className="sf-sc-num">SCENARIO · 00</div>
-            <div className="sf-sc-title">Vault inception</div>
-            <div className="sf-sc-desc">Hybrid cipher → Nitro enclave → wrapped Mongo + Drive.</div>
+          <button className="sf-tab sf-active" data-scenario="partner_setup">
+            <div className="sf-sc-num">00</div>
+            <div className="sf-sc-title">Partner setup</div>
+            <div className="sf-sc-desc">SDK · roles · no raw PII DB.</div>
+          </button>
+          <button className="sf-tab" data-scenario="vault_inception">
+            <div className="sf-sc-num">01</div>
+            <div className="sf-sc-title">User + vault</div>
+            <div className="sf-sc-desc">Onboard · enclave · proof_id.</div>
           </button>
           <button className="sf-tab" data-scenario="boolean">
-            <div className="sf-sc-num">SCENARIO · 01</div>
-            <div className="sf-sc-title">Boolean proof</div>
-            <div className="sf-sc-desc">Decrypt in Nitro · signed assertion only.</div>
-          </button>
-          <button className="sf-tab" data-scenario="payment">
-            <div className="sf-sc-num">SCENARIO · 02</div>
-            <div className="sf-sc-title">Face-payment</div>
-            <div className="sf-sc-desc">Face + voice 2FA, tokenized payment intent.</div>
+            <div className="sf-sc-num">02</div>
+            <div className="sf-sc-title">Verified claim</div>
+            <div className="sf-sc-desc">Default · JWS · no raw fields.</div>
           </button>
           <button className="sf-tab" data-scenario="plaintext">
-            <div className="sf-sc-num">SCENARIO · 03</div>
-            <div className="sf-sc-title">Plaintext access</div>
-            <div className="sf-sc-desc">High-risk view. Employee MFA + watermark.</div>
+            <div className="sf-sc-num">03</div>
+            <div className="sf-sc-title">Employee view</div>
+            <div className="sf-sc-desc">SESSION-PLAIN · no DB write.</div>
           </button>
           <button className="sf-tab" data-scenario="revoke">
-            <div className="sf-sc-num">SCENARIO · 04</div>
-            <div className="sf-sc-title">Revoke + cascade</div>
-            <div className="sf-sc-desc">Lineage REVOKED · deletion callbacks · fail-closed.</div>
+            <div className="sf-sc-num">04</div>
+            <div className="sf-sc-title">Revoke</div>
+            <div className="sf-sc-desc">Token kill · cascade.</div>
           </button>
           <button className="sf-tab" data-scenario="lineage_reshare">
-            <div className="sf-sc-num">SCENARIO · 05</div>
-            <div className="sf-sc-title">Lineage re-share</div>
-            <div className="sf-sc-desc">A→B through enclave · consent #2 · ledger edge.</div>
+            <div className="sf-sc-num">05</div>
+            <div className="sf-sc-title">A→B share</div>
+            <div className="sf-sc-desc">Lineage · no side-channel.</div>
           </button>
-          <button className="sf-tab" data-scenario="a2a_agent">
-            <div className="sf-sc-num">SCENARIO · 06</div>
-            <div className="sf-sc-title">A2A agent-to-agent</div>
-            <div className="sf-sc-desc">6 phases · 3 data classes · orchestrated.</div>
+          <button className="sf-tab" data-scenario="virtual_db">
+            <div className="sf-sc-num">06</div>
+            <div className="sf-sc-title">Virtual DB</div>
+            <div className="sf-sc-desc">Claims · not SQL PII.</div>
           </button>
           <button className="sf-tab" data-scenario="encrypted_share">
-            <div className="sf-sc-num">SCENARIO · 07</div>
-            <div className="sf-sc-title">Encrypted share</div>
-            <div className="sf-sc-desc">Enclave → encrypt-to-company pubkey.</div>
+            <div className="sf-sc-num">07</div>
+            <div className="sf-sc-title">Field unlock</div>
+            <div className="sf-sc-desc">OPERATE · encrypt-to-co.</div>
+          </button>
+          <button className="sf-tab" data-scenario="a2a_agent">
+            <div className="sf-sc-num">08</div>
+            <div className="sf-sc-title">A2A agents</div>
+            <div className="sf-sc-desc">VERIFY · OPERATE · INTENT.</div>
           </button>
           <button className="sf-tab" data-scenario="data_update">
-            <div className="sf-sc-num">SCENARIO · 08</div>
-            <div className="sf-sc-title">Vault data update</div>
-            <div className="sf-sc-desc">KYC refresh, forward secrecy, cache invalidation.</div>
+            <div className="sf-sc-num">09</div>
+            <div className="sf-sc-title">Vault update</div>
+            <div className="sf-sc-desc">Forward secrecy · webhook.</div>
+          </button>
+          <button className="sf-tab" data-scenario="payment">
+            <div className="sf-sc-num">10</div>
+            <div className="sf-sc-title">Payment proof</div>
+            <div className="sf-sc-desc">Processor holds PAN.</div>
           </button>
           <button className="sf-tab" data-scenario="new_device">
-            <div className="sf-sc-num">SCENARIO · 09</div>
-            <div className="sf-sc-title">New device recovery</div>
-            <div className="sf-sc-desc">Old device approves · UMK re-wrapped · zero PII.</div>
+            <div className="sf-sc-num">11</div>
+            <div className="sf-sc-title">New device</div>
+            <div className="sf-sc-desc">Re-wrap · step-up.</div>
+          </button>
+          <button className="sf-tab" data-scenario="breach_response">
+            <div className="sf-sc-num">12</div>
+            <div className="sf-sc-title">Breach</div>
+            <div className="sf-sc-desc">Evidence · lineage trace.</div>
           </button>
         </nav>
       </div>
@@ -2710,15 +2884,15 @@ export const SystemFlowDemo = ({ mode = "embedded" }: SystemFlowDemoProps) => {
         <aside className="sf-dossier">
           <div className="sf-dossier-head">Dossier · current step</div>
           <div id="sf-narration" className="sf-narration sf-narration-in-panel">
-            Choose a scenario above and press <strong>Play</strong>. v3: lineage ledger, A→B re-share, A2A+KYA, cascade revoke — on v2 Nitro enclave between DB and vault.
+            Choose a scenario and press <strong>Play</strong>. Vault-native: partners use ByoSync as data infrastructure — not a raw PII database. Track <strong>CIPHER vs META vs SESSION-PLAIN</strong> on every step. Spec: byosync_updated_vault_native_flow.md.
           </div>
           <div id="sf-dossierBody">
             <div className="sf-entry">
               <div className="sf-entry-num">Step 0 · Ready</div>
-              <div className="sf-entry-title">Press <em>Play</em></div>
+              <div className="sf-entry-title">Partner setup · no raw PII DB</div>
               <div className="sf-entry-desc">
-                Each step shows what&apos;s happening on each device, what cryptography is running, and which clauses of <strong>DPDP Rules 2025</strong>, <strong>SOC 2</strong>, and <strong>PCI DSS v4.0.1</strong> apply.<br /><br />
-                <strong>v3 on v2:</strong> enclave decrypts; DB holds lineage + hash-chain audit; VERIFY default, OPERATE minimal. Specs: BYOSYNC_FLOW_V2_ENCLAVE_TARGET.md + BYOSYNC_FLOW_V3_LINEAGE_A2A_COMPLIANCE.md.
+                Each step shows <strong>route</strong>, <strong>on-the-wire data state</strong>, and compliance tags. Partner DB holds <code>byosync_user_token</code>, <code>proof_id</code>, consent status — never name, DOB, documents, or biometrics by default.<br /><br />
+                <strong>10 core invariants</strong> in byosync_updated_vault_native_flow.md §1. Start at <strong>00 Partner setup</strong>, then <strong>01 User + vault</strong>.
               </div>
             </div>
           </div>

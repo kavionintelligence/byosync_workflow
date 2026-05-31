@@ -132,6 +132,43 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+@keyframes scan-line {
+  0% { top: 0%; }
+  100% { top: 100%; }
+}
+
+@keyframes orbital-drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.landing-glow-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-glow-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(
+    600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    var(--glow-color, rgba(37, 99, 235, 0.08)),
+    transparent 40%
+  );
+  pointer-events: none;
+}
+
+.landing-glow-card:hover::before {
+  opacity: 1;
+}
+
+.animate-orbital-drift {
+  animation: orbital-drift 6s ease-in-out infinite;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

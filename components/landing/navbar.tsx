@@ -47,6 +47,12 @@ export const Navbar = () => {
         {/* Desktop */}
         <div className="hidden items-center gap-2 md:flex md:gap-3">
           <Button asChild variant="ghost" className={navLinkBtn}>
+            <a href="/#solution">Product</a>
+          </Button>
+          <Button asChild variant="ghost" className={navLinkBtn}>
+            <a href="/#how-it-works">How it works</a>
+          </Button>
+          <Button asChild variant="ghost" className={navLinkBtn}>
             <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
               Demo
             </a>
@@ -81,6 +87,12 @@ export const Navbar = () => {
       {menuOpen ? (
         <div className="border-b border-blue-100/80 bg-white/98 px-4 py-4 shadow-sm md:hidden">
           <div className="flex flex-col gap-2">
+            <Button asChild variant="ghost" className={`${navLinkBtn} w-full justify-center`}>
+              <a href="/#solution" onClick={() => setMenuOpen(false)}>Product</a>
+            </Button>
+            <Button asChild variant="ghost" className={`${navLinkBtn} w-full justify-center`}>
+              <a href="/#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
+            </Button>
             <Button
               asChild
               variant="ghost"

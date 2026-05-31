@@ -680,7 +680,7 @@ export const PlatformPreview = () => {
           <div className="mb-8 flex items-center justify-center gap-3">
             <div className="h-px max-w-16 flex-1 bg-blue-200/60" />
             <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-blue-500">
-              Platform Experience
+              Evidence dashboard · User & partner views
             </span>
             <div className="h-px max-w-16 flex-1 bg-blue-200/60" />
           </div>

@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WaveBackground } from "./WaveBackground";
+import { LANDING_FINAL_CTA } from "@/lib/landing-content";
 
 export const WaitlistSection = () => {
   const [status, setStatus] = useState<"idle" | "submitting" | "success">("idle");
@@ -149,11 +150,20 @@ export const WaitlistSection = () => {
                   className="rounded-[2rem] border border-blue-100 bg-white p-6 shadow-xl backdrop-blur-2xl sm:p-8 md:p-12"
                 >
                   <h2 className="mb-4 text-3xl font-extrabold leading-tight tracking-tighter text-blue-950 sm:mb-6 sm:text-4xl md:text-5xl lg:text-6xl">
-                    Join the <span className="text-blue-600">Waitlist.</span>
+                    {LANDING_FINAL_CTA.headline.split("\n").map((line, i, arr) => (
+                      <span key={i} className="block">
+                        {i === arr.length - 1 ? (
+                          <span className="text-blue-600">{line}</span>
+                        ) : (
+                          line
+                        )}
+                      </span>
+                    ))}
                   </h2>
                   <p className="mb-8 max-w-md text-base leading-relaxed text-blue-800 sm:mb-10 sm:text-lg md:text-xl">
-                    Zero-biometric infrastructure. <br />Available for early-access partners.
+                    {LANDING_FINAL_CTA.subline}
                   </p>
+                  <p className="mb-8 text-xs text-blue-600/70">{LANDING_FINAL_CTA.legalNote}</p>
 
                   <form onSubmit={handleSubmit} className="space-y-5">
                     {submitError && (
